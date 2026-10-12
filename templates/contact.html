@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="contact-layout">
+  <div>
+    <p class="eyebrow">WE’RE HERE TO HELP</p>
+    <h1>{{ cfg.heading }}</h1>
+    <p>{{ cfg.intro }}</p>
+    <p><a href="mailto:{{ site.contact_email }}">{{ site.contact_email }}</a></p>
+  </div>
+  <div class="contact-form">
+    <form method="post" action="{{ url_for('contact') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="honeypot" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+      {% if sent %}<p class="success">Thanks for your message. We’ll be in touch.</p>{% endif %}
+      <label for="cname">Your name</label><input id="cname" name="name" value="{{ form.get('name','') }}" required>
+      <label for="cemail">Email</label><input id="cemail" type="email" name="email" value="{{ form.get('email','') }}" required>
+      <label for="topic">Topic</label>
+      <select id="topic" name="topic">{% for t in cfg.topics %}<option{% if form.get('topic') == t %} selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+      <label for="cbody">Message</label><textarea id="cbody" name="body" rows="6" required>{{ form.get('body','') }}</textarea>
+      <button class="button dark" type="submit">Send message ↗</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

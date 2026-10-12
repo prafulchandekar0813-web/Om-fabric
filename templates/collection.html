@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="products">
+  <p class="eyebrow">THREAD &amp; CO. COLLECTION</p>
+  <h1>{{ collection.title }}</h1>
+  {% if collection.description %}<p class="collection-description">{{ collection.description }}</p>{% endif %}
+  <div class="product-grid">
+    {% for product in products %}{% include "_product_card.html" %}{% else %}<p>No products yet.</p>{% endfor %}
+  </div>
+  {% if pages > 1 %}
+  <nav class="pagination">
+    {% if page > 1 %}<a href="?page={{ page - 1 }}">← Previous</a>{% endif %}
+    Page {{ page }} of {{ pages }}
+    {% if page < pages %}<a href="?page={{ page + 1 }}">Next →</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endblock %}

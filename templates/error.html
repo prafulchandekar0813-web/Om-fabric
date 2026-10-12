@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-content">
+  <p class="eyebrow">{{ code }}</p>
+  <h1>{{ message }}</h1>
+  <a class="button dark" href="{{ url_for('index') }}">Back to home</a>
+</section>
+{% endblock %}

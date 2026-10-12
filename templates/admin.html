@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="admin">
+  <p class="eyebrow">OWNER VIEW</p>
+  <h2>Orders ({{ orders|length }})</h2>
+  <table>
+    <tr><th>#</th><th>Placed</th><th>Customer</th><th>Ship to</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+    {% for o in orders %}
+    <tr>
+      <td>{{ o.number }}</td><td>{{ o.created_at }}</td>
+      <td>{{ o.name }}<br>{{ o.email }}<br>{{ o.phone }}</td>
+      <td>{{ o.address }}, {{ o.city }}, {{ o.state }} {{ o.pincode }}{% if o.notes %}<br><em>{{ o.notes }}</em>{% endif %}</td>
+      <td>{% for i in o["items"] %}{{ i.quantity }} × {{ i.product }} ({{ i.variant }})<br>{% endfor %}</td>
+      <td>{{ o.total | money }}</td><td>{{ o.payment_method }}</td>
+      <td><form method="post" action="{{ url_for('admin_status', order_id=o.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <select name="status">{% for s in statuses %}<option{% if s == o.status %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+        <button>Save</button></form></td>
+    </tr>
+    {% else %}<tr><td colspan="8">No orders yet.</td></tr>{% endfor %}
+  </table>
+  <h2>Messages ({{ messages|length }})</h2>
+  <table>
+    <tr><th>Received</th><th>From</th><th>Topic</th><th>Message</th></tr>
+    {% for m in messages %}<tr><td>{{ m.created_at }}</td><td>{{ m.name }}<br>{{ m.email }}</td><td>{{ m.topic }}</td><td>{{ m.body }}</td></tr>
+    {% else %}<tr><td colspan="4">No messages yet.</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

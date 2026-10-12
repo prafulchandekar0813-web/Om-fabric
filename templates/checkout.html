@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% macro err(name) %}{% if errors.get(name) %}<p class="field-error">{{ errors[name] }}</p>{% endif %}{% endmacro %}
+{% block content %}
+<section class="checkout">
+  <div>
+    <p class="eyebrow">ALMOST THERE</p>
+    <h1>Checkout</h1>
+    {% if errors.get('cart') %}<p class="field-error">{{ errors.cart }}</p>{% endif %}
+    <form method="post" action="{{ url_for('checkout') }}" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="honeypot" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+
+      <label for="name">Full name</label>
+      <input id="name" name="name" value="{{ form.get('name','') }}" autocomplete="name" required>{{ err('name') }}
+      <div class="two">
+        <div><label for="email">Email</label><input id="email" type="email" name="email" value="{{ form.get('email','') }}" autocomplete="email" required>{{ err('email') }}</div>
+        <div><label for="phone">Mobile number</label><input id="phone" type="tel" name="phone" value="{{ form.get('phone','') }}" autocomplete="tel" required>{{ err('phone') }}</div>
+      </div>
+      <label for="address">Address</label>
+      <textarea id="address" name="address" rows="3" autocomplete="street-address" required>{{ form.get('address','') }}</textarea>{{ err('address') }}
+      <div class="two">
+        <div><label for="city">City</label><input id="city" name="city" value="{{ form.get('city','') }}" autocomplete="address-level2" required>{{ err('city') }}</div>
+        <div><label for="state">State</label><input id="state" name="state" value="{{ form.get('state','') }}" autocomplete="address-level1" required>{{ err('state') }}</div>
+      </div>
+      <label for="pincode">PIN code</label>
+      <input id="pincode" name="pincode" inputmode="numeric" maxlength="6" value="{{ form.get('pincode','') }}" autocomplete="postal-code" required>{{ err('pincode') }}
+
+      <label for="payment">Payment method</label>
+      <select id="payment" name="payment">
+        {% for m in methods %}<option value="{{ m.id }}"{% if form.get('payment') == m.id %} selected{% endif %}>{{ m.label }}</option>{% endfor %}
+      </select>{{ err('payment') }}
+      <p class="note">{{ methods[0].instructions }}</p>
+
+      <label for="notes">Order notes (optional)</label>
+      <textarea id="notes" name="notes" rows="2">{{ form.get('notes','') }}</textarea>
+      <button class="button dark" type="submit">Place order ↗</button>
+    </form>
+  </div>
+  <aside class="order-summary">
+    <h2>Order summary</h2>
+    {% for l in lines %}
+      <div class="line"><span>{{ l.quantity }} × {{ l.product.title }}{% if l.variant.title != 'Default Title' %} ({{ l.variant.title }}){% endif %}</span><span>{{ l.line_price | money }}</span></div>
+    {% endfor %}
+    <div class="summary-row"><span>Subtotal</span><span>{{ totals.subtotal | money }}</span></div>
+    <div class="summary-row"><span>Shipping</span><span>{{ 'Free' if totals.shipping == 0 else totals.shipping | money }}</span></div>
+    <div class="summary-row grand"><span>Total</span><span>{{ totals.total | money }}</span></div>
+  </aside>
+</section>
+{% endblock %}

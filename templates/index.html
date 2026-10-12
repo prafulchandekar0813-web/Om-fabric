@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">{{ hero.eyebrow }}</p>
+    <h1>{{ hero.heading | e | nl2br | safe }}</h1>
+    <p class="hero-copy">{{ hero.body }}</p>
+    <a class="button dark" href="{{ hero.button_link or url_for('collection', handle='all') }}">{{ hero.button_label }} ↗</a>
+  </div>
+  <div class="hero-image">
+    {% if hero.image %}<img src="{{ hero.image | img_url }}" alt="" loading="eager">{% else %}<span>Add a hero image</span>{% endif %}
+  </div>
+</section>
+
+<section class="products" id="shop">
+  <div class="section-heading">
+    <div><p class="eyebrow">{{ featured.eyebrow }}</p><h2>{{ featured.heading }}</h2></div>
+    {% if featured_collection %}<a href="{{ url_for('collection', handle=featured_collection.handle) }}">Shop all ↗</a>{% endif %}
+  </div>
+  {% if products %}
+    <div class="product-grid">{% for product in products %}{% include "_product_card.html" %}{% endfor %}</div>
+  {% else %}
+    <p>Set a featured collection in data/site.json.</p>
+  {% endif %}
+</section>
+{% endblock %}

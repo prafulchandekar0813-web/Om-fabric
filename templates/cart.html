@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="cart-page">
+  <p class="eyebrow">YOUR PICKS</p>
+  <h1>Your bag</h1>
+  {% if not lines %}
+    <p>Your bag is waiting for something good.</p>
+    <a class="button dark" href="{{ url_for('collection', handle='all') }}">Continue shopping</a>
+  {% else %}
+  <form action="{{ url_for('cart_update') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for l in lines %}
+    <div class="cart-line">
+      {% if l.product.featured_image %}<img src="{{ l.product.featured_image | img_url }}" alt="{{ l.product.title }}">{% else %}<div></div>{% endif %}
+      <div>
+        <a href="{{ l.product.url }}">{{ l.product.title }}</a>
+        {% if l.variant.title != 'Default Title' %}<p>{{ l.variant.title }}</p>{% endif %}
+        <p>{{ l.line_price | money }}</p>
+        <label for="qty-{{ l.variant.id }}">Qty</label>
+        <input id="qty-{{ l.variant.id }}" type="number" name="qty_{{ l.variant.id }}" value="{{ l.quantity }}" min="0" max="20">
+        <p class="remove">Set Qty to 0 and press “Update bag” to remove.</p>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="total">
+      <div class="summary-row"><span>Subtotal</span><span>{{ totals.subtotal | money }}</span></div>
+      <div class="summary-row"><span>Shipping</span><span>{{ 'Free' if totals.shipping == 0 else totals.shipping | money }}</span></div>
+      {% if totals.shipping %}<p class="note">Free shipping on orders over {{ totals.free_over | money }}.</p>{% endif %}
+      <div class="summary-row grand"><span>Total</span><span>{{ totals.total | money }}</span></div>
+    </div>
+    <div class="cart-actions">
+      <button class="button" name="update" type="submit">Update bag</button>
+      <button class="button dark" name="checkout" type="submit">Checkout ↗</button>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

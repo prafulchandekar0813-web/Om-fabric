@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ page_title }}{% if site.shop_name not in page_title %} — {{ site.shop_name }}{% endif %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+  <style>:root{--paper:{{ site.background_color }}}</style>
+  <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#MainContent">Skip to content</a>
+  {% if site.announcement_text %}<div class="announcement">{{ site.announcement_text }}</div>{% endif %}
+
+  <header class="site-header">
+    <a class="brand" href="{{ url_for('index') }}">{{ site.brand_text or site.shop_name }}</a>
+    <button class="menu-toggle" aria-expanded="false" aria-controls="MainNav" aria-label="Open navigation"><span></span><span></span></button>
+    <nav class="main-nav" id="MainNav">
+      {% for link in site.nav %}<a href="{{ link.url }}">{{ link.title }}</a>{% endfor %}
+    </nav>
+    <a class="cart-link" href="{{ url_for('cart') }}">Bag ({{ cart_count }})</a>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}" role="status">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <main id="MainContent">{% block content %}{% endblock %}</main>
+
+  <footer class="site-footer">
+    <a class="brand" href="{{ url_for('index') }}">{{ site.brand_text or site.shop_name }}</a>
+    <p>{{ site.footer_tagline }}</p>
+    <div class="footer-links">{% for link in site.footer_nav %}<a href="{{ link.url }}">{{ link.title }}</a>{% endfor %}</div>
+    <small>© {{ now_year }} {{ site.shop_name }}</small>
+  </footer>
+</body>
+</html>

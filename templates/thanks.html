@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-content">
+  <p class="eyebrow">THANK YOU</p>
+  <h1>Order #{{ order_number }} confirmed</h1>
+  <div class="rte">
+    <p>Thanks, {{ order.name }}. We’ve received your order and will contact you at {{ order.email }} or {{ order.phone }} to confirm it.</p>
+    <p><strong>Payment:</strong> {{ order.payment_method }}<br>
+       <strong>Delivering to:</strong> {{ order.address }}, {{ order.city }}, {{ order.state }} {{ order.pincode }}</p>
+    {% for i in items %}<p>{{ i.quantity }} × {{ i.product }}{% if i.variant != 'Default Title' %} ({{ i.variant }}){% endif %} — {{ (i.unit_price * i.quantity) | money }}</p>{% endfor %}
+    <p>Shipping: {{ 'Free' if order.shipping == 0 else order.shipping | money }}<br><strong>Total: {{ order.total | money }}</strong></p>
+  </div>
+  <a class="button dark" href="{{ url_for('index') }}">Continue shopping</a>
+</section>
+{% endblock %}
