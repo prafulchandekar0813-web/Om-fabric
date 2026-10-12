@@ -6,17 +6,56 @@
   "contact_email": "hello@example.com",
   "footer_tagline": "Everyday, considered.",
   "nav": [
-    {"title": "Shop", "url": "/collections/all"},
-    {"title": "New Arrivals", "url": "/collections/new-arrivals"},
-    {"title": "Sale", "url": "/collections/sale"},
-    {"title": "About", "url": "/pages/about"},
-    {"title": "Contact", "url": "/contact"}
+    {
+      "title": "Shop",
+      "url": "/collections/all"
+    },
+    {
+      "title": "New Arrivals",
+      "url": "/collections/new-arrivals"
+    },
+    {
+      "title": "Sale",
+      "url": "/collections/sale"
+    },
+    {
+      "title": "About",
+      "url": "/pages/about"
+    },
+    {
+      "title": "Contact",
+      "url": "/contact"
+    }
   ],
   "footer_nav": [
-    {"title": "About", "url": "/pages/about"},
-    {"title": "Shipping & Delivery", "url": "/pages/shipping"},
-    {"title": "Returns", "url": "/pages/returns"},
-    {"title": "Contact", "url": "/contact"}
+    {
+      "title": "About",
+      "url": "/pages/about"
+    },
+    {
+      "title": "Shipping & Delivery",
+      "url": "/pages/shipping"
+    },
+    {
+      "title": "Returns",
+      "url": "/pages/returns"
+    },
+    {
+      "title": "Privacy",
+      "url": "/pages/privacy"
+    },
+    {
+      "title": "Terms",
+      "url": "/pages/terms"
+    },
+    {
+      "title": "Track order",
+      "url": "/track"
+    },
+    {
+      "title": "Contact",
+      "url": "/contact"
+    }
   ],
   "hero": {
     "eyebrow": "THE EVERYDAY EDIT",
@@ -34,14 +73,42 @@
   },
   "shipping": {
     "flat_rate": 80,
-    "free_over": 1999
+    "free_over": 1999,
+    "cod_fee": 0
   },
   "payment_methods": [
-    {"id": "cod", "label": "Cash on Delivery", "instructions": "Pay in cash when your order arrives."}
+    {
+      "id": "razorpay",
+      "label": "Pay online (UPI, cards, netbanking)",
+      "instructions": "You’ll be taken to a secure Razorpay window to complete payment."
+    },
+    {
+      "id": "cod",
+      "label": "Cash on Delivery",
+      "instructions": "Pay in cash when your order arrives."
+    }
   ],
   "contact": {
     "heading": "Let’s talk. We’re listening.",
     "intro": "Questions about a piece, an order, or anything else? Send us a note.",
-    "topics": ["Product question", "Order support", "Returns and exchanges", "Feedback", "Other"]
+    "topics": [
+      "Product question",
+      "Order support",
+      "Returns and exchanges",
+      "Feedback",
+      "Other"
+    ]
+  },
+  "meta_description": "Easy-to-wear everyday pieces from Thread & Co. Shipped across India.",
+  "og_image": "img/hero.svg",
+  "analytics": {
+    "ga4_id": "",
+    "plausible_domain": ""
+  },
+  "business": {
+    "legal_name": "",
+    "address": "",
+    "phone": "",
+    "gstin": ""
   }
 }

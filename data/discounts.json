@@ -1,0 +1,24 @@
+{
+  "WELCOME10": {
+    "type": "percent",
+    "value": 10,
+    "min_order": 499,
+    "once_per_customer": true,
+    "expires": "2027-12-31",
+    "active": true,
+    "description": "10% off your first order"
+  },
+  "FLAT100": {
+    "type": "flat",
+    "value": 100,
+    "min_order": 999,
+    "expires": "2027-12-31",
+    "active": true,
+    "description": "₹100 off orders over ₹999"
+  },
+  "FREESHIP": {
+    "type": "free_shipping",
+    "active": false,
+    "description": "Free shipping (switched off — set active to true to use)"
+  }
+}

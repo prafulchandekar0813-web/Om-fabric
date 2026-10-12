@@ -5,10 +5,22 @@
   },
   "shipping": {
     "title": "Shipping & Delivery",
-    "content": "<p>We ship across India. Orders are dispatched within 2–3 working days. Flat-rate shipping applies; orders above the free-shipping threshold ship free.</p>"
+    "draft": true,
+    "content": "<p><strong>Where we ship:</strong> across India. We do not currently ship internationally.</p><p><strong>Processing time:</strong> orders are packed and dispatched within 2–3 working days of confirmation.</p><p><strong>Delivery time:</strong> usually 3–7 working days after dispatch, depending on your location. Remote PIN codes can take longer.</p><p><strong>Shipping charges:</strong> a flat shipping fee applies to each order; orders above the free-shipping amount shown in your bag ship free. Cash on Delivery orders may carry an additional COD fee, shown at checkout.</p><p><strong>Tracking:</strong> once your order ships we email you the courier and tracking details. You can also check your order status any time on the <a href=\"/track\">Track order</a> page.</p><p><strong>Delivery problems:</strong> if your parcel is delayed, damaged or lost, write to us through the <a href=\"/contact\">contact page</a> with your order number.</p>"
   },
   "returns": {
-    "title": "Returns",
-    "content": "<p>Not quite right? Write to us within 7 days of delivery and we’ll arrange an exchange or return. Replace with your own policy.</p>"
+    "title": "Returns & Exchanges",
+    "draft": true,
+    "content": "<p>We want you to love what you ordered. If something isn’t right, contact us within <strong>7 days of delivery</strong>.</p><p><strong>Eligible items:</strong> unworn, unwashed items with original tags and packaging. Items marked as final sale, and socks and other intimate items, can’t be returned unless faulty.</p><p><strong>Faulty or wrong item:</strong> if we sent the wrong item or it arrived damaged, tell us within 48 hours of delivery with photos and we will replace it or refund you in full, including shipping.</p><p><strong>How to start a return:</strong> use the <a href=\"/contact\">contact page</a>, choose “Returns and exchanges”, and include your order number.</p><p><strong>Refunds:</strong> approved refunds go back to your original payment method within 5–7 working days of us receiving the item. Cash on Delivery refunds are sent by bank transfer or UPI to details you provide.</p><p><strong>Cancellations:</strong> you can cancel before your order ships by contacting us as soon as possible.</p>"
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "draft": true,
+    "content": "<p><strong>What we collect:</strong> when you order or contact us we collect your name, email, phone number, delivery address and order details. If you pay online, payment is handled by Razorpay; we never see or store your card or UPI details.</p><p><strong>How we use it:</strong> to process and deliver orders, send order updates, answer your messages, and meet legal and tax obligations.</p><p><strong>Who we share it with:</strong> only the services needed to fulfil your order — our payment provider, courier partners and email provider. We do not sell your personal data.</p><p><strong>Cookies:</strong> we use a cookie to keep your bag and checkout working. If analytics is switched on, an analytics provider may also set cookies to measure site usage.</p><p><strong>Keeping your data:</strong> we keep order records for as long as required for accounting and legal purposes.</p><p><strong>Your choices:</strong> to ask for access, correction or deletion of your personal data, write to us through the <a href=\"/contact\">contact page</a>.</p>"
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "draft": true,
+    "content": "<p>By using this website and placing an order you agree to these terms.</p><p><strong>Orders:</strong> an order is accepted when we confirm it. We may cancel an order (with a full refund of anything paid) if an item is out of stock, a price was listed in error, or we cannot verify the order.</p><p><strong>Prices:</strong> all prices are in Indian rupees (₹). Shipping and any COD fee are shown before you place your order.</p><p><strong>Payment:</strong> we accept the payment methods shown at checkout. Online payments are processed securely by Razorpay.</p><p><strong>Product information:</strong> we try to show colours and details accurately, but screens vary slightly.</p><p><strong>Returns, shipping and privacy:</strong> see our Returns, Shipping &amp; Delivery and Privacy pages, which form part of these terms.</p><p><strong>Liability:</strong> to the extent permitted by law, our liability for any order is limited to the amount you paid for it.</p><p><strong>Governing law:</strong> these terms are governed by the laws of India.</p>"
   }
 }

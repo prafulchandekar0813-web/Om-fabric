@@ -41,28 +41,28 @@
           "title": "S",
           "price": 1499,
           "compare_at_price": 1999,
-          "available": true
+          "stock": 6
         },
         {
           "id": "rls-m",
           "title": "M",
           "price": 1499,
           "compare_at_price": 1999,
-          "available": true
+          "stock": 12
         },
         {
           "id": "rls-l",
           "title": "L",
           "price": 1499,
           "compare_at_price": 1999,
-          "available": true
+          "stock": 10
         },
         {
           "id": "rls-xl",
           "title": "XL",
           "price": 1499,
           "compare_at_price": 1999,
-          "available": true
+          "stock": 4
         }
       ]
     },
@@ -84,28 +84,28 @@
           "title": "S",
           "price": 799,
           "compare_at_price": null,
-          "available": true
+          "stock": 10
         },
         {
           "id": "ect-m",
           "title": "M",
           "price": 799,
           "compare_at_price": null,
-          "available": true
+          "stock": 20
         },
         {
           "id": "ect-l",
           "title": "L",
           "price": 799,
           "compare_at_price": null,
-          "available": true
+          "stock": 15
         },
         {
           "id": "ect-xl",
           "title": "XL",
           "price": 799,
           "compare_at_price": null,
-          "available": true
+          "stock": 8
         }
       ]
     },
@@ -126,28 +126,28 @@
           "title": "S",
           "price": 1899,
           "compare_at_price": null,
-          "available": true
+          "stock": 5
         },
         {
           "id": "wlt-m",
           "title": "M",
           "price": 1899,
           "compare_at_price": null,
-          "available": true
+          "stock": 8
         },
         {
           "id": "wlt-l",
           "title": "L",
           "price": 1899,
           "compare_at_price": null,
-          "available": true
+          "stock": 6
         },
         {
           "id": "wlt-xl",
           "title": "XL",
           "price": 1899,
           "compare_at_price": null,
-          "available": false
+          "stock": 0
         }
       ]
     },
@@ -169,28 +169,28 @@
           "title": "S",
           "price": 1299,
           "compare_at_price": 1599,
-          "available": true
+          "stock": 3
         },
         {
           "id": "rkv-m",
           "title": "M",
           "price": 1299,
           "compare_at_price": 1599,
-          "available": true
+          "stock": 7
         },
         {
           "id": "rkv-l",
           "title": "L",
           "price": 1299,
           "compare_at_price": 1599,
-          "available": true
+          "stock": 7
         },
         {
           "id": "rkv-xl",
           "title": "XL",
           "price": 1299,
           "compare_at_price": 1599,
-          "available": true
+          "stock": 2
         }
       ]
     },
@@ -211,7 +211,7 @@
           "title": "Default Title",
           "price": 699,
           "compare_at_price": null,
-          "available": true
+          "stock": 25
         }
       ]
     },
@@ -230,28 +230,28 @@
           "title": "S",
           "price": 2499,
           "compare_at_price": null,
-          "available": true
+          "stock": 3
         },
         {
           "id": "osj-m",
           "title": "M",
           "price": 2499,
           "compare_at_price": null,
-          "available": true
+          "stock": 6
         },
         {
           "id": "osj-l",
           "title": "L",
           "price": 2499,
           "compare_at_price": null,
-          "available": true
+          "stock": 6
         },
         {
           "id": "osj-xl",
           "title": "XL",
           "price": 2499,
           "compare_at_price": null,
-          "available": true
+          "stock": 2
         }
       ]
     },
@@ -272,28 +272,28 @@
           "title": "S",
           "price": 1699,
           "compare_at_price": 2199,
-          "available": true
+          "stock": 4
         },
         {
           "id": "pms-m",
           "title": "M",
           "price": 1699,
           "compare_at_price": 2199,
-          "available": true
+          "stock": 9
         },
         {
           "id": "pms-l",
           "title": "L",
           "price": 1699,
           "compare_at_price": 2199,
-          "available": true
+          "stock": 9
         },
         {
           "id": "pms-xl",
           "title": "XL",
           "price": 1699,
           "compare_at_price": 2199,
-          "available": true
+          "stock": 3
         }
       ]
     },
@@ -314,7 +314,7 @@
           "title": "Default Title",
           "price": 499,
           "compare_at_price": null,
-          "available": true
+          "stock": 40
         }
       ]
     }
