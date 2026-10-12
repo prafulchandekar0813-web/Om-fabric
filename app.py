@@ -1,11 +1,16 @@
 """Thread & Co. — standalone storefront (Flask).
 
-Replaces the Shopify theme's backend: catalogue, cart, checkout (COD),
-contact form and a small password-protected admin view.
+Catalogue, cart, discount codes, stock counts, checkout (Razorpay online
+payments + Cash on Delivery), order emails, order tracking, contact form,
+search, SEO files and a password-protected admin.
 
-Content lives in data/*.json. Orders and messages are stored in SQLite.
+Content lives in data/*.json. Orders, messages and stock live in SQLite.
 """
+import base64
+import csv
+import hashlib
 import hmac
+import io
 import json
 import logging
 import os
@@ -13,19 +18,28 @@ import re
 import secrets
 import smtplib
 import sqlite3
-from datetime import datetime
+import tempfile
+import threading
+import urllib.request
+from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
+from html import escape
 from pathlib import Path
 
 from flask import (Flask, Response, abort, flash, g, redirect, render_template,
                    request, session, url_for)
+from markupsafe import Markup
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = Path(os.environ.get("DATABASE_PATH", BASE_DIR / "store.db"))
 PER_PAGE = 12
 MAX_QTY = 20
-ORDER_STATUSES = ["new", "confirmed", "shipped", "delivered", "cancelled"]
+PENDING_MINUTES = 30          # how long stock is held for an unpaid online order
+ORDER_STATUSES = ["pending_payment", "new", "confirmed", "shipped", "delivered", "cancelled"]
+STATUS_LABELS = {"pending_payment": "Awaiting payment", "new": "Order received",
+                 "confirmed": "Confirmed", "shipped": "Shipped",
+                 "delivered": "Delivered", "cancelled": "Cancelled"}
 
 app = Flask(__name__)
 app.config.update(
@@ -33,7 +47,7 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") == "1",
-    MAX_CONTENT_LENGTH=64 * 1024,
+    MAX_CONTENT_LENGTH=256 * 1024,
 )
 log = logging.getLogger("threadandco")
 
@@ -44,9 +58,14 @@ log = logging.getLogger("threadandco")
 _cache = {}
 
 
-def load_json(name):
+def load_json(name, default=None):
     path = DATA_DIR / name
-    mtime = path.stat().st_mtime
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        if default is not None:
+            return default
+        raise
     hit = _cache.get(name)
     if not hit or hit[0] != mtime:
         with open(path, encoding="utf-8") as f:
@@ -55,9 +74,9 @@ def load_json(name):
 
 
 def catalog():
-    """Products with the derived fields the templates use."""
-    hit = _cache.get("_catalog")
+    """Products with derived, static fields (live stock is added at render time)."""
     mtime = (DATA_DIR / "products.json").stat().st_mtime
+    hit = _cache.get("_catalog")
     if hit and hit[0] == mtime:
         return hit[1]
     raw = load_json("products.json")
@@ -66,7 +85,6 @@ def catalog():
         vs = p["variants"]
         p["price"] = min(v["price"] for v in vs)
         p["compare_at_max"] = max((v.get("compare_at_price") or 0) for v in vs)
-        p["available"] = any(v.get("available", True) for v in vs)
         p["has_only_default_variant"] = len(vs) == 1 and vs[0]["title"] == "Default Title"
         p["featured_image"] = p["images"][0] if p.get("images") else None
         p["url"] = f"/products/{p['handle']}"
@@ -84,6 +102,20 @@ def collection_products(handle):
     if handle == "all":
         return cat["products"]
     return [p for p in cat["products"] if handle in p.get("collections", [])]
+
+
+def sort_products(items, sort):
+    if sort == "price-asc":
+        return sorted(items, key=lambda p: p["price"])
+    if sort == "price-desc":
+        return sorted(items, key=lambda p: -p["price"])
+    if sort == "title":
+        return sorted(items, key=lambda p: p["title"].lower())
+    return items
+
+
+SORT_OPTIONS = [("", "Featured"), ("price-asc", "Price: low to high"),
+                ("price-desc", "Price: high to low"), ("title", "Name: A–Z")]
 
 
 # --------------------------------------------------------------------------
@@ -112,6 +144,17 @@ def img_url(path):
     return url_for("static", filename=path)
 
 
+def abs_url(path):
+    base = os.environ.get("SITE_URL") or request.url_root
+    if path.startswith(("http://", "https://")):
+        return path
+    return base.rstrip("/") + path
+
+
+def plain(html):
+    return Markup(html or "").striptags()
+
+
 app.jinja_env.filters["money"] = money
 app.jinja_env.filters["img_url"] = img_url
 app.jinja_env.filters["nl2br"] = lambda s: re.sub(r"\n", "<br>", s)
@@ -124,60 +167,11 @@ def csrf_token():
 
 
 # --------------------------------------------------------------------------
-# Cart (stored in the signed session cookie: {variant_id: quantity})
-# --------------------------------------------------------------------------
-def cart_lines():
-    cat = catalog()
-    lines = []
-    for vid, qty in session.get("cart", {}).items():
-        found = cat["variants"].get(vid)
-        if not found:
-            continue
-        product, variant = found
-        lines.append({"product": product, "variant": variant, "quantity": qty,
-                      "line_price": variant["price"] * qty})
-    return lines
-
-
-def cart_totals(lines):
-    site = load_json("site.json")["shipping"]
-    subtotal = sum(l["line_price"] for l in lines)
-    shipping = 0 if (not lines or subtotal >= site["free_over"]) else site["flat_rate"]
-    return {"subtotal": subtotal, "shipping": shipping, "total": subtotal + shipping,
-            "count": sum(l["quantity"] for l in lines),
-            "free_over": site["free_over"]}
-
-
-@app.context_processor
-def inject_globals():
-    site = load_json("site.json")
-    count = sum(session.get("cart", {}).values())
-    return {"site": site, "cart_count": count, "csrf_token": csrf_token,
-            "now_year": datetime.now().year}
-
-
-@app.before_request
-def csrf_protect():
-    if request.method == "POST":
-        sent = request.form.get("csrf_token", "")
-        if not sent or not hmac.compare_digest(sent, session.get("csrf", "")):
-            abort(400, "Your session expired. Please go back, refresh and try again.")
-
-
-@app.after_request
-def security_headers(resp):
-    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    return resp
-
-
-# --------------------------------------------------------------------------
-# Database (orders + contact messages)
+# Database
 # --------------------------------------------------------------------------
 def db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        g.db = sqlite3.connect(DB_PATH, timeout=15)
         g.db.row_factory = sqlite3.Row
     return g.db
 
@@ -187,6 +181,14 @@ def close_db(_exc):
     conn = g.pop("db", None)
     if conn is not None:
         conn.close()
+
+
+ORDER_EXTRA_COLUMNS = {
+    "payment_status": "TEXT DEFAULT 'cod'", "razorpay_order_id": "TEXT",
+    "razorpay_payment_id": "TEXT", "discount_code": "TEXT",
+    "discount_amount": "INTEGER DEFAULT 0", "cod_fee": "INTEGER DEFAULT 0",
+    "tracking": "TEXT", "admin_note": "TEXT",
+}
 
 
 def init_db():
@@ -207,7 +209,15 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             name TEXT, email TEXT, topic TEXT, body TEXT
         );
+        CREATE TABLE IF NOT EXISTS inventory (
+            variant_id TEXT PRIMARY KEY,
+            stock INTEGER NOT NULL
+        );
     """)
+    have = {r[1] for r in conn.execute("PRAGMA table_info(orders)")}
+    for col, decl in ORDER_EXTRA_COLUMNS.items():       # upgrades older databases in place
+        if col not in have:
+            conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {decl}")
     conn.commit()
     conn.close()
 
@@ -215,25 +225,345 @@ def init_db():
 init_db()
 
 
-def notify(subject, body):
-    """Email the shop owner if SMTP_* env vars are set; otherwise just log."""
+# --------------------------------------------------------------------------
+# Inventory (variants with a "stock" number in products.json are counted)
+# --------------------------------------------------------------------------
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
+def restock(conn, items):
+    for it in items:
+        conn.execute("UPDATE inventory SET stock = stock + ? WHERE variant_id=?",
+                     (it["quantity"], it["variant_id"]))
+
+
+def expire_pending():
+    """Release stock held by online orders that were never paid."""
+    cutoff = (utcnow() - timedelta(minutes=PENDING_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    rows = conn.execute("SELECT id, items_json FROM orders WHERE status='pending_payment' "
+                        "AND created_at < ?", (cutoff,)).fetchall()
+    for r in rows:
+        restock(conn, json.loads(r["items_json"]))
+        conn.execute("UPDATE orders SET status='cancelled', payment_status='expired' WHERE id=?", (r["id"],))
+    if rows:
+        conn.commit()
+
+
+def inventory():
+    """{variant_id: stock} for counted variants, loaded once per request."""
+    if "inv" not in g:
+        expire_pending()
+        conn = db()
+        rows = {r["variant_id"]: r["stock"] for r in conn.execute("SELECT variant_id, stock FROM inventory")}
+        missing = [(vid, v["stock"]) for vid, (_, v) in catalog()["variants"].items()
+                   if "stock" in v and vid not in rows]
+        if missing:
+            conn.executemany("INSERT OR IGNORE INTO inventory VALUES (?,?)", missing)
+            conn.commit()
+            rows.update(dict(missing))
+        g.inv = rows
+    return g.inv
+
+
+def stock_of(variant):
+    """Units left, or None if this variant isn't counted."""
+    if "stock" not in variant:
+        return None
+    return inventory().get(variant["id"], variant["stock"])
+
+
+def is_available(variant):
+    if not variant.get("available", True):
+        return False
+    s = stock_of(variant)
+    return s is None or s > 0
+
+
+def product_available(product):
+    return any(is_available(v) for v in product["variants"])
+
+
+def reserve(conn, items):
+    """Atomically take stock for an order. Returns an error message or None."""
+    inventory()                                   # makes sure rows exist
+    variants = catalog()["variants"]
+    for it in items:
+        found = variants.get(it["variant_id"])
+        if not found or "stock" not in found[1]:
+            continue
+        cur = conn.execute("UPDATE inventory SET stock = stock - ? WHERE variant_id=? AND stock >= ?",
+                           (it["quantity"], it["variant_id"], it["quantity"]))
+        if cur.rowcount == 0:
+            conn.rollback()
+            left = conn.execute("SELECT stock FROM inventory WHERE variant_id=?", (it["variant_id"],)).fetchone()
+            left = left["stock"] if left else 0
+            name = f"{it['product']} ({it['variant']})" if it["variant"] != "Default Title" else it["product"]
+            return (f"Sorry, {name} just sold out." if left <= 0
+                    else f"Sorry, only {left} left of {name}. Please update your bag.")
+    g.pop("inv", None)
+    return None
+
+
+app.jinja_env.globals.update(avail=is_available, stock_of=stock_of,
+                             product_available=product_available, abs_url=abs_url,
+                             status_labels=STATUS_LABELS)
+
+
+# --------------------------------------------------------------------------
+# Cart, discounts, totals
+# --------------------------------------------------------------------------
+def cart_lines():
+    cat = catalog()
+    lines = []
+    for vid, qty in session.get("cart", {}).items():
+        found = cat["variants"].get(vid)
+        if not found:
+            continue
+        product, variant = found
+        lines.append({"product": product, "variant": variant, "quantity": qty,
+                      "line_price": variant["price"] * qty,
+                      "stock": stock_of(variant), "available": is_available(variant)})
+    return lines
+
+
+def load_discounts():
+    return load_json("discounts.json", default={})
+
+
+def check_discount(code, subtotal, email=None):
+    """-> (discount dict or None, error message or None)"""
+    code = (code or "").strip().upper()
+    d = load_discounts().get(code)
+    if not d or not d.get("active", True):
+        return None, "That code isn’t valid."
+    if d.get("expires") and date.today() > date.fromisoformat(d["expires"]):
+        return None, "That code has expired."
+    if subtotal < d.get("min_order", 0):
+        return None, f"This code needs a minimum order of {money(d['min_order'])}."
+    conn = db()
+    if d.get("max_uses") is not None:
+        used = conn.execute("SELECT COUNT(*) FROM orders WHERE discount_code=? AND status!='cancelled'",
+                            (code,)).fetchone()[0]
+        if used >= d["max_uses"]:
+            return None, "That code has been fully redeemed."
+    if d.get("once_per_customer") and email:
+        used = conn.execute("SELECT COUNT(*) FROM orders WHERE discount_code=? AND status!='cancelled' "
+                            "AND lower(email)=lower(?)", (code, email)).fetchone()[0]
+        if used:
+            return None, "You’ve already used this code."
+    return dict(d, code=code), None
+
+
+def cart_totals(lines, payment_id=None, email=None):
+    cfg = load_json("site.json")["shipping"]
+    subtotal = sum(l["line_price"] for l in lines)
+    discount, code, err = 0, None, None
+    entered = session.get("discount")
+    if entered and lines:
+        d, err = check_discount(entered, subtotal, email)
+        if d:
+            code = d["code"]
+            if d["type"] == "percent":
+                discount = round(subtotal * d["value"] / 100)
+            elif d["type"] == "flat":
+                discount = d["value"]
+            discount = min(discount, subtotal)
+        else:
+            session.pop("discount", None)
+    shipping = 0 if (not lines or subtotal >= cfg["free_over"]) else cfg["flat_rate"]
+    if code and load_discounts()[code]["type"] == "free_shipping":
+        shipping = 0
+    cod_fee = cfg.get("cod_fee", 0) if (payment_id == "cod" and lines) else 0
+    return {"subtotal": subtotal, "discount": discount, "code": code, "discount_error": err,
+            "shipping": shipping, "cod_fee": cod_fee,
+            "total": subtotal - discount + shipping + cod_fee,
+            "count": sum(l["quantity"] for l in lines), "free_over": cfg["free_over"]}
+
+
+@app.context_processor
+def inject_globals():
+    return {"site": load_json("site.json"),
+            "cart_count": sum(session.get("cart", {}).values()),
+            "csrf_token": csrf_token, "now_year": datetime.now().year,
+            "sort_options": SORT_OPTIONS}
+
+
+@app.before_request
+def csrf_protect():
+    if request.method == "POST" and request.endpoint != "razorpay_webhook":
+        sent = request.form.get("csrf_token", "")
+        if not sent or not hmac.compare_digest(sent, session.get("csrf", "")):
+            abort(400, "Your session expired. Please go back, refresh and try again.")
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return resp
+
+
+# --------------------------------------------------------------------------
+# Email (sent in the background; only if SMTP_* env vars are set)
+# --------------------------------------------------------------------------
+def send_email(to, subject, body, reply_to=None):
     host = os.environ.get("SMTP_HOST")
-    to = os.environ.get("NOTIFY_EMAIL") or load_json("site.json")["contact_email"]
-    if not host:
-        log.info("(no SMTP configured) %s", subject)
+    if not host or not to:
+        log.info("(email not sent — SMTP not configured) to=%s subject=%s", to, subject)
         return
-    try:
-        msg = EmailMessage()
-        msg["Subject"], msg["To"] = subject, to
-        msg["From"] = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or to
-        msg.set_content(body)
-        with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", 587)), timeout=10) as s:
-            s.starttls()
-            if os.environ.get("SMTP_USER"):
-                s.login(os.environ["SMTP_USER"], os.environ.get("SMTP_PASSWORD", ""))
-            s.send_message(msg)
-    except Exception:  # never let an email problem break an order
-        log.exception("Could not send notification email")
+    sender = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or to
+    port = int(os.environ.get("SMTP_PORT", 587))
+    user, password = os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASSWORD", "")
+
+    def _send():
+        try:
+            msg = EmailMessage()
+            msg["Subject"], msg["To"], msg["From"] = subject, to, sender
+            if reply_to:
+                msg["Reply-To"] = reply_to
+            msg.set_content(body)
+            with smtplib.SMTP(host, port, timeout=15) as s:
+                s.starttls()
+                if user:
+                    s.login(user, password)
+                s.send_message(msg)
+        except Exception:                       # an email problem must never break an order
+            log.exception("Could not send email to %s", to)
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
+def owner_email():
+    return os.environ.get("NOTIFY_EMAIL") or load_json("site.json")["contact_email"]
+
+
+def notify(subject, body, reply_to=None):
+    send_email(owner_email(), subject, body, reply_to)
+
+
+def item_lines(items):
+    out = []
+    for i in items:
+        label = f" ({i['variant']})" if i["variant"] != "Default Title" else ""
+        out.append(f"  {i['quantity']} x {i['product']}{label} — {money(i['unit_price'] * i['quantity'])}")
+    return "\n".join(out)
+
+
+def order_money_lines(row):
+    out = [f"  Subtotal: {money(row['subtotal'])}"]
+    if row["discount_amount"]:
+        out.append(f"  Discount ({row['discount_code']}): -{money(row['discount_amount'])}")
+    out.append(f"  Shipping: {'Free' if not row['shipping'] else money(row['shipping'])}")
+    if row["cod_fee"]:
+        out.append(f"  COD fee: {money(row['cod_fee'])}")
+    out.append(f"  Total: {money(row['total'])}")
+    return "\n".join(out)
+
+
+def send_order_emails(order_id):
+    row = db().execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    if not row:
+        return
+    shop = load_json("site.json")["shop_name"]
+    items, num = json.loads(row["items_json"]), 1000 + row["id"]
+    paid = "Paid online" if row["payment_status"] == "paid" else row["payment_method"]
+    send_email(row["email"], f"Your {shop} order #{num}",
+               f"Hi {row['name']},\n\nThanks for your order! Here’s your summary.\n\n"
+               f"Order #{num}\n{item_lines(items)}\n\n{order_money_lines(row)}\n\n"
+               f"Payment: {paid}\n"
+               f"Delivering to: {row['address']}, {row['city']}, {row['state']} {row['pincode']}\n\n"
+               f"We’ll email you again when it ships. You can check progress any time at "
+               f"{abs_url('/track')} using your order number and this email address.\n\n— {shop}",
+               reply_to=owner_email())
+    notify(f"New order #{num} — {money(row['total'])} ({paid})",
+           f"{row['name']} / {row['phone']} / {row['email']}\n"
+           f"{row['address']}, {row['city']}, {row['state']} {row['pincode']}\n"
+           f"Payment: {paid}\n\n{item_lines(items)}\n\n{order_money_lines(row)}\n\n"
+           f"Notes: {row['notes'] or '-'}", reply_to=row["email"])
+
+
+def send_status_email(row, status):
+    shop = load_json("site.json")["shop_name"]
+    num = 1000 + row["id"]
+    if status == "shipped":
+        extra = f"\nTracking details: {row['tracking']}\n" if row["tracking"] else ""
+        body = (f"Hi {row['name']},\n\nGood news — your order #{num} has shipped.\n{extra}\n"
+                f"Check status any time: {abs_url('/track')}\n\n— {shop}")
+        send_email(row["email"], f"Your {shop} order #{num} has shipped", body, reply_to=owner_email())
+    elif status == "cancelled":
+        refund = ("\nSince you paid online, your refund will be sent to your original payment method.\n"
+                  if row["payment_status"] == "paid" else "")
+        send_email(row["email"], f"Your {shop} order #{num} was cancelled",
+                   f"Hi {row['name']},\n\nYour order #{num} has been cancelled.\n{refund}\n"
+                   f"If you have questions, just reply to this email.\n\n— {shop}", reply_to=owner_email())
+
+
+# --------------------------------------------------------------------------
+# Razorpay (online payments). Needs RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET.
+# --------------------------------------------------------------------------
+def rz_keys():
+    return os.environ.get("RAZORPAY_KEY_ID"), os.environ.get("RAZORPAY_KEY_SECRET")
+
+
+def razorpay_enabled():
+    return all(rz_keys())
+
+
+def razorpay_create_order(amount_rupees, receipt, notes):
+    key, secret = rz_keys()
+    payload = json.dumps({"amount": int(amount_rupees) * 100, "currency": "INR",
+                          "receipt": receipt, "notes": notes}).encode()
+    token = base64.b64encode(f"{key}:{secret}".encode()).decode()
+    req = urllib.request.Request("https://api.razorpay.com/v1/orders", data=payload, method="POST",
+                                 headers={"Content-Type": "application/json",
+                                          "Authorization": f"Basic {token}"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r)
+
+
+def razorpay_signature_ok(rz_order_id, payment_id, signature):
+    _, secret = rz_keys()
+    if not secret or not rz_order_id or not payment_id or not signature:
+        return False
+    expected = hmac.new(secret.encode(), f"{rz_order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def mark_paid(order_id, payment_id):
+    """Idempotent. Returns True only for the call that actually flipped it to paid."""
+    conn = db()
+    row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    if not row or row["payment_status"] == "paid":
+        return False
+    note = row["admin_note"] or ""
+    revive = row["status"] == "cancelled" and row["payment_status"] == "expired"
+    if revive:      # the stock hold had lapsed; take stock again (never below zero)
+        for it in json.loads(row["items_json"]):
+            conn.execute("UPDATE inventory SET stock = MAX(stock - ?, 0) WHERE variant_id=?",
+                         (it["quantity"], it["variant_id"]))
+        note = (note + " Paid after the stock hold expired — please check stock.").strip()
+    elif row["status"] == "cancelled":
+        note = (note + " Payment arrived after you cancelled this order — refund needed.").strip()
+    cur = conn.execute(
+        """UPDATE orders SET payment_status='paid', razorpay_payment_id=?, admin_note=?,
+           status=CASE WHEN status='pending_payment' OR ?=1 THEN 'new' ELSE status END
+           WHERE id=? AND payment_status!='paid'""", (payment_id, note, 1 if revive else 0, order_id))
+    conn.commit()
+    g.pop("inv", None)
+    return cur.rowcount == 1
+
+
+def own_order(order_id):
+    """Only the browser that placed the order may open its payment/confirmation page."""
+    if session.get("last_order") != order_id:
+        abort(404)
+    row = db().execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    if not row:
+        abort(404)
+    return row
 
 
 # --------------------------------------------------------------------------
@@ -246,8 +576,8 @@ def index():
     col = catalog()["collections"].get(feat["collection"])
     products = collection_products(feat["collection"])[: feat.get("limit", 4)] if col else []
     return render_template("index.html", hero=site["hero"], featured=feat,
-                           featured_collection=col, products=products,
-                           page_title="Home")
+                           featured_collection=col, products=products, page_title="Home",
+                           og_image=site.get("og_image"))
 
 
 @app.route("/collections/<handle>")
@@ -255,12 +585,27 @@ def collection(handle):
     col = catalog()["collections"].get(handle)
     if not col:
         abort(404)
-    items = collection_products(handle)
+    sort = request.args.get("sort") if request.args.get("sort") in {o[0] for o in SORT_OPTIONS if o[0]} else None
+    items = sort_products(collection_products(handle), sort)
     pages = max(1, -(-len(items) // PER_PAGE))
     page = min(max(request.args.get("page", 1, type=int), 1), pages)
     items = items[(page - 1) * PER_PAGE: page * PER_PAGE]
-    return render_template("collection.html", collection=col, products=items,
-                           page=page, pages=pages, page_title=col["title"])
+    return render_template("collection.html", collection=col, products=items, page=page,
+                           pages=pages, sort=sort, page_title=col["title"],
+                           meta_description=col.get("description") or None)
+
+
+@app.route("/search")
+def search():
+    q = request.args.get("q", "").strip()[:80]
+    results = []
+    if q:
+        words = q.lower().split()
+        for p in catalog()["products"]:
+            hay = f"{p['title']} {p['vendor']} {plain(p['description'])}".lower()
+            if all(w in hay for w in words):
+                results.append(p)
+    return render_template("search.html", q=q, products=results, page_title="Search", noindex=True)
 
 
 @app.route("/products/<handle>")
@@ -268,8 +613,17 @@ def product(handle):
     p = catalog()["by_handle"].get(handle)
     if not p:
         abort(404)
-    first = next((v for v in p["variants"] if v.get("available", True)), p["variants"][0])
-    return render_template("product.html", product=p, selected=first, page_title=p["title"])
+    first = next((v for v in p["variants"] if is_available(v)), p["variants"][0])
+    ld = {"@context": "https://schema.org", "@type": "Product", "name": p["title"],
+          "description": str(plain(p["description"])), "brand": {"@type": "Brand", "name": p["vendor"]},
+          "image": [abs_url(img_url(i)) for i in p.get("images", [])],
+          "offers": {"@type": "Offer", "priceCurrency": "INR", "price": p["price"],
+                     "url": abs_url(p["url"]),
+                     "availability": "https://schema.org/InStock" if product_available(p)
+                     else "https://schema.org/OutOfStock"}}
+    return render_template("product.html", product=p, selected=first, page_title=p["title"],
+                           meta_description=str(plain(p["description"]))[:160],
+                           og_image=p["featured_image"], ld=ld)
 
 
 @app.route("/pages/<handle>")
@@ -277,13 +631,17 @@ def page(handle):
     pg = load_json("pages.json").get(handle)
     if not pg:
         abort(404)
-    return render_template("page.html", page=pg, page_title=pg["title"])
+    return render_template("page.html", page=pg, page_title=pg["title"],
+                           meta_description=str(plain(pg["content"]))[:160])
 
 
 @app.route("/cart")
 def cart():
     lines = cart_lines()
-    return render_template("cart.html", lines=lines, totals=cart_totals(lines), page_title="Your bag")
+    totals = cart_totals(lines)
+    if totals["discount_error"]:
+        flash(totals["discount_error"], "error")
+    return render_template("cart.html", lines=lines, totals=totals, page_title="Your bag", noindex=True)
 
 
 @app.post("/cart/add")
@@ -293,12 +651,23 @@ def cart_add():
     if not found:
         abort(404)
     _, variant = found
-    if not variant.get("available", True):
+    back = request.referrer or url_for("cart")
+    if not is_available(variant):
         flash("Sorry, that option is sold out.", "error")
-        return redirect(request.referrer or url_for("cart"))
+        return redirect(back)
     qty = max(1, min(request.form.get("quantity", 1, type=int) or 1, MAX_QTY))
     cart_data = dict(session.get("cart", {}))
-    cart_data[vid] = min(cart_data.get(vid, 0) + qty, MAX_QTY)
+    have = cart_data.get(vid, 0)
+    new = min(have + qty, MAX_QTY)
+    left = stock_of(variant)
+    if left is not None:
+        new = min(new, left)
+    if new <= have:
+        flash("You already have all the available stock for that item in your bag.", "error")
+        return redirect(url_for("cart"))
+    if new < have + qty and left is not None and new == left:
+        flash(f"Only {left} available — we’ve added what we have.", "error")
+    cart_data[vid] = new
     session["cart"] = cart_data
     return redirect(url_for("cart"))
 
@@ -306,15 +675,43 @@ def cart_add():
 @app.post("/cart/update")
 def cart_update():
     cart_data = {}
+    variants = catalog()["variants"]
     for vid in session.get("cart", {}):
         raw = request.form.get(f"qty_{vid}")
         qty = int(raw) if raw and raw.isdigit() else session["cart"][vid]
+        if vid in variants:
+            left = stock_of(variants[vid][1])
+            if left is not None and qty > left:
+                qty = left
+                flash(f"Only {left} left of {variants[vid][0]['title']} — quantity adjusted.", "error")
         if qty > 0:
             cart_data[vid] = min(qty, MAX_QTY)
     session["cart"] = cart_data
     if "checkout" in request.form and cart_data:
         return redirect(url_for("checkout"))
     return redirect(url_for("cart"))
+
+
+@app.post("/cart/discount")
+def cart_discount():
+    if request.form.get("remove"):
+        session.pop("discount", None)
+        return redirect(url_for("cart"))
+    code = request.form.get("code", "").strip().upper()[:40]
+    lines = cart_lines()
+    subtotal = sum(l["line_price"] for l in lines)
+    d, err = check_discount(code, subtotal)
+    if d:
+        session["discount"] = code
+        flash(f"Code {code} applied.")
+    else:
+        flash(err, "error")
+    return redirect(url_for("cart"))
+
+
+def payment_methods():
+    return [m for m in load_json("site.json")["payment_methods"]
+            if m["id"] != "razorpay" or razorpay_enabled()]
 
 
 PHONE_RE = re.compile(r"^(\+91[\s-]?)?[6-9]\d{9}$")
@@ -326,14 +723,13 @@ def checkout():
     lines = cart_lines()
     if not lines:
         return redirect(url_for("cart"))
-    totals = cart_totals(lines)
-    methods = load_json("site.json")["payment_methods"]
+    methods = payment_methods()
     form, errors = {}, {}
 
     if request.method == "POST":
         form = {k: request.form.get(k, "").strip() for k in
                 ["name", "email", "phone", "address", "city", "state", "pincode", "notes", "payment"]}
-        if request.form.get("website"):          # honeypot: bots fill this in
+        if request.form.get("website"):                  # honeypot: bots fill this in
             return redirect(url_for("index"))
         if len(form["name"]) < 2: errors["name"] = "Please enter your name."
         if not EMAIL_RE.match(form["email"]): errors["email"] = "Please enter a valid email."
@@ -344,53 +740,151 @@ def checkout():
         if not re.fullmatch(r"\d{6}", form["pincode"]): errors["pincode"] = "Enter a 6-digit PIN code."
         method = next((m for m in methods if m["id"] == form["payment"]), None)
         if not method: errors["payment"] = "Please choose a payment method."
+        had_code = bool(session.get("discount"))
+        totals = cart_totals(lines, form["payment"], form["email"])
+        if had_code and not totals["code"]:
+            errors["cart"] = totals["discount_error"] or "Your discount code is no longer valid."
         for l in lines:
-            if not l["variant"].get("available", True):
-                errors["cart"] = f"{l['product']['title']} ({l['variant']['title']}) just sold out. Please update your bag."
+            name = l["product"]["title"] + ("" if l["variant"]["title"] == "Default Title" else f" ({l['variant']['title']})")
+            if not l["available"]:
+                errors["cart"] = f"{name} just sold out. Please update your bag."
+            elif l["stock"] is not None and l["quantity"] > l["stock"]:
+                errors["cart"] = f"Only {l['stock']} left of {name}. Please update your bag."
 
         if not errors:
             items = [{"product": l["product"]["title"], "variant": l["variant"]["title"],
                       "variant_id": l["variant"]["id"], "quantity": l["quantity"],
                       "unit_price": l["variant"]["price"]} for l in lines]
-            cur = db().execute(
-                """INSERT INTO orders (name,email,phone,address,city,state,pincode,notes,
-                   payment_method,items_json,subtotal,shipping,total)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (form["name"], form["email"], form["phone"], form["address"], form["city"],
-                 form["state"], form["pincode"], form["notes"], method["label"],
-                 json.dumps(items), totals["subtotal"], totals["shipping"], totals["total"]))
-            db().commit()
-            order_id = cur.lastrowid
-            summary = "\n".join(f"{i['quantity']} x {i['product']} ({i['variant']}) @ {money(i['unit_price'])}" for i in items)
-            notify(f"New order #{1000 + order_id} — {money(totals['total'])}",
-                   f"{form['name']} / {form['phone']} / {form['email']}\n"
-                   f"{form['address']}, {form['city']}, {form['state']} {form['pincode']}\n"
-                   f"Payment: {method['label']}\n\n{summary}\n\nTotal: {money(totals['total'])}\n"
-                   f"Notes: {form['notes'] or '-'}")
-            session["cart"] = {}
-            session["last_order"] = order_id
-            return redirect(url_for("thanks", order_id=order_id))
+            conn = db()
+            problem = reserve(conn, items)
+            if problem:
+                errors["cart"] = problem
+            else:
+                online = method["id"] == "razorpay"
+                cur = conn.execute(
+                    """INSERT INTO orders (name,email,phone,address,city,state,pincode,notes,
+                       payment_method,payment_status,status,discount_code,discount_amount,cod_fee,
+                       items_json,subtotal,shipping,total)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (form["name"], form["email"], form["phone"], form["address"], form["city"],
+                     form["state"], form["pincode"], form["notes"], method["label"],
+                     "pending" if online else "cod", "pending_payment" if online else "new",
+                     totals["code"], totals["discount"], totals["cod_fee"],
+                     json.dumps(items), totals["subtotal"], totals["shipping"], totals["total"]))
+                conn.commit()
+                order_id = cur.lastrowid
+                if online:
+                    try:
+                        rz = razorpay_create_order(totals["total"], f"TC-{1000 + order_id}",
+                                                   {"order_number": str(1000 + order_id)})
+                        conn.execute("UPDATE orders SET razorpay_order_id=? WHERE id=?", (rz["id"], order_id))
+                        conn.commit()
+                    except Exception:
+                        log.exception("Razorpay order creation failed")
+                        restock(conn, items)
+                        conn.execute("UPDATE orders SET status='cancelled', payment_status='failed' WHERE id=?",
+                                     (order_id,))
+                        conn.commit()
+                        g.pop("inv", None)
+                        errors["payment"] = ("Online payment isn’t available right now. "
+                                             "Please try again, or choose Cash on Delivery.")
+                if not errors:
+                    session["cart"] = {}
+                    session.pop("discount", None)
+                    session["last_order"] = order_id
+                    if online:
+                        return redirect(url_for("pay", order_id=order_id))
+                    send_order_emails(order_id)
+                    return redirect(url_for("thanks", order_id=order_id))
+        lines = cart_lines()      # refresh stock figures before re-showing the form
+    else:
+        totals = cart_totals(lines, methods[0]["id"])
+        if totals["discount_error"]:
+            flash(totals["discount_error"], "error")
+    shown = cart_totals(lines, form.get("payment") or methods[0]["id"], form.get("email"))
+    return render_template("checkout.html", lines=lines, totals=shown, methods=methods, form=form,
+                           errors=errors, cod_fee=load_json("site.json")["shipping"].get("cod_fee", 0),
+                           page_title="Checkout", noindex=True)
 
-    return render_template("checkout.html", lines=lines, totals=totals, methods=methods,
-                           form=form, errors=errors, page_title="Checkout")
+
+@app.route("/pay/<int:order_id>")
+def pay(order_id):
+    row = own_order(order_id)
+    if row["payment_status"] == "paid":
+        return redirect(url_for("thanks", order_id=order_id))
+    if row["status"] != "pending_payment" or not row["razorpay_order_id"]:
+        return render_template("error.html", code="PAYMENT",
+                               message="This payment window has expired. Please place your order again.",
+                               page_title="Payment expired"), 410
+    return render_template("pay.html", order=row, number=1000 + order_id, key_id=rz_keys()[0],
+                           page_title="Pay", noindex=True)
+
+
+@app.post("/pay/<int:order_id>/verify")
+def pay_verify(order_id):
+    row = own_order(order_id)
+    rz_order = request.form.get("razorpay_order_id", "")
+    payment_id = request.form.get("razorpay_payment_id", "")
+    sig = request.form.get("razorpay_signature", "")
+    if rz_order != row["razorpay_order_id"] or not razorpay_signature_ok(rz_order, payment_id, sig):
+        flash("We couldn’t verify that payment. If money was deducted, it will be matched "
+              "automatically or refunded — please contact us with your order number.", "error")
+        return redirect(url_for("pay", order_id=order_id))
+    if mark_paid(order_id, payment_id):
+        send_order_emails(order_id)
+    return redirect(url_for("thanks", order_id=order_id))
+
+
+@app.post("/razorpay/webhook")
+def razorpay_webhook():
+    """Backup path: confirms payment even if the customer closes the browser tab."""
+    secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET")
+    if not secret:
+        abort(404)
+    body = request.get_data()
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, request.headers.get("X-Razorpay-Signature", "")):
+        abort(400)
+    event = json.loads(body or b"{}")
+    if event.get("event") in ("payment.captured", "order.paid"):
+        pay_entity = event.get("payload", {}).get("payment", {}).get("entity", {})
+        row = db().execute("SELECT id FROM orders WHERE razorpay_order_id=?",
+                           (pay_entity.get("order_id"),)).fetchone()
+        if row and mark_paid(row["id"], pay_entity.get("id")):
+            send_order_emails(row["id"])
+    return "ok"
 
 
 @app.route("/order/<int:order_id>/thanks")
 def thanks(order_id):
-    if session.get("last_order") != order_id:   # only the buyer can see their confirmation
-        abort(404)
-    row = db().execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
-    if not row:
-        abort(404)
+    row = own_order(order_id)
+    if row["status"] == "pending_payment":
+        return redirect(url_for("pay", order_id=order_id))
     return render_template("thanks.html", order=row, items=json.loads(row["items_json"]),
-                           order_number=1000 + order_id, page_title="Order confirmed")
+                           order_number=1000 + order_id, page_title="Order confirmed", noindex=True)
+
+
+@app.route("/track", methods=["GET", "POST"])
+def track():
+    order = items = None
+    error = None
+    if request.method == "POST":
+        num = re.sub(r"\D", "", request.form.get("number", ""))
+        email = request.form.get("email", "").strip().lower()
+        row = db().execute("SELECT * FROM orders WHERE id=?", (int(num) - 1000,)).fetchone() if num and int(num) > 1000 else None
+        if row and row["email"].lower() == email and row["status"] != "pending_payment":
+            order, items = row, json.loads(row["items_json"])
+        else:
+            error = "We couldn’t find an order with that number and email."
+    return render_template("track.html", order=order, items=items, error=error,
+                           steps=["new", "confirmed", "shipped", "delivered"], page_title="Track order", noindex=True)
 
 
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     cfg = load_json("site.json")["contact"]
     if request.method == "POST":
-        if request.form.get("website"):          # honeypot
+        if request.form.get("website"):                  # honeypot
             return redirect(url_for("contact", sent=1))
         name = request.form.get("name", "").strip()[:100]
         email = request.form.get("email", "").strip()[:200]
@@ -401,13 +895,11 @@ def contact():
         if not name or not EMAIL_RE.match(email) or not body:
             flash("Please fill in your name, a valid email and a message.", "error")
             return render_template("contact.html", cfg=cfg, form=request.form, page_title="Contact"), 400
-        db().execute("INSERT INTO messages (name,email,topic,body) VALUES (?,?,?,?)",
-                     (name, email, topic, body))
+        db().execute("INSERT INTO messages (name,email,topic,body) VALUES (?,?,?,?)", (name, email, topic, body))
         db().commit()
-        notify(f"Contact form: {topic} — {name}", f"From: {name} <{email}>\nTopic: {topic}\n\n{body}")
+        notify(f"Contact form: {topic} — {name}", f"From: {name} <{email}>\nTopic: {topic}\n\n{body}", reply_to=email)
         return redirect(url_for("contact", sent=1))
-    return render_template("contact.html", cfg=cfg, form={}, sent=request.args.get("sent"),
-                           page_title="Contact")
+    return render_template("contact.html", cfg=cfg, form={}, sent=request.args.get("sent"), page_title="Contact")
 
 
 # --------------------------------------------------------------------------
@@ -427,23 +919,98 @@ def admin_ok():
 @app.route("/admin")
 def admin():
     admin_ok()
-    orders = db().execute("SELECT * FROM orders ORDER BY id DESC LIMIT 200").fetchall()
+    inventory()                                           # also releases expired holds
+    orders = db().execute("SELECT * FROM orders ORDER BY id DESC LIMIT 300").fetchall()
     orders = [dict(o, items=json.loads(o["items_json"]), number=1000 + o["id"]) for o in orders]
     messages = db().execute("SELECT * FROM messages ORDER BY id DESC LIMIT 200").fetchall()
-    return render_template("admin.html", orders=orders, messages=messages,
-                           statuses=ORDER_STATUSES, page_title="Admin")
+    counted = [(p, v, stock_of(v)) for p in catalog()["products"] for v in p["variants"] if "stock" in v]
+    return render_template("admin.html", orders=orders, messages=messages, statuses=ORDER_STATUSES,
+                           counted=counted, razorpay=razorpay_enabled(),
+                           smtp=bool(os.environ.get("SMTP_HOST")), page_title="Admin", noindex=True)
 
 
 @app.post("/admin/order/<int:order_id>/status")
 def admin_status(order_id):
     admin_ok()
+    conn = db()
+    row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    if not row:
+        abort(404)
     status = request.form.get("status")
-    if status in ORDER_STATUSES:
-        db().execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
-        db().commit()
+    tracking = request.form.get("tracking", "").strip()[:200]
+    conn.execute("UPDATE orders SET tracking=? WHERE id=?", (tracking, order_id))
+    if status in ORDER_STATUSES and status != row["status"]:
+        if row["status"] == "cancelled":
+            flash("Cancelled orders can’t be reopened — ask the customer to place a new order.", "error")
+        else:
+            if status == "cancelled":
+                restock(conn, json.loads(row["items_json"]))
+            conn.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
+            g.pop("inv", None)
+            conn.commit()
+            fresh = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+            if status in ("shipped", "cancelled"):
+                send_status_email(fresh, status)
+    conn.commit()
     return redirect(url_for("admin"))
 
 
+@app.post("/admin/stock")
+def admin_stock():
+    admin_ok()
+    conn = db()
+    inventory()
+    for vid, (_, v) in catalog()["variants"].items():
+        raw = request.form.get(f"stock_{vid}")
+        if "stock" in v and raw is not None and raw.strip().isdigit():
+            conn.execute("UPDATE inventory SET stock=? WHERE variant_id=?", (int(raw), vid))
+    conn.commit()
+    g.pop("inv", None)
+    flash("Stock updated.")
+    return redirect(url_for("admin") + "#stock")
+
+
+def csv_safe(v):
+    v = "" if v is None else str(v)
+    return "'" + v if v[:1] in ("=", "+", "-", "@") else v
+
+
+@app.route("/admin/orders.csv")
+def admin_orders_csv():
+    admin_ok()
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["order", "placed_utc", "status", "payment_status", "payment_method", "name", "email",
+                "phone", "address", "city", "state", "pincode", "items", "subtotal", "discount_code",
+                "discount", "shipping", "cod_fee", "total", "tracking", "notes", "admin_note"])
+    for o in db().execute("SELECT * FROM orders ORDER BY id"):
+        items = "; ".join(f"{i['quantity']}x {i['product']} ({i['variant']})" for i in json.loads(o["items_json"]))
+        w.writerow([csv_safe(x) for x in [
+            1000 + o["id"], o["created_at"], o["status"], o["payment_status"], o["payment_method"], o["name"],
+            o["email"], o["phone"], o["address"], o["city"], o["state"], o["pincode"], items, o["subtotal"],
+            o["discount_code"], o["discount_amount"], o["shipping"], o["cod_fee"], o["total"], o["tracking"],
+            o["notes"], o["admin_note"]]])
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=orders.csv"})
+
+
+@app.route("/admin/backup.db")
+def admin_backup():
+    admin_ok()
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+    tmp.close()
+    dst = sqlite3.connect(tmp.name)
+    db().backup(dst)
+    dst.close()
+    data = Path(tmp.name).read_bytes()
+    os.unlink(tmp.name)
+    return Response(data, mimetype="application/octet-stream", headers={
+        "Content-Disposition": f"attachment; filename=store-{datetime.now():%Y%m%d-%H%M}.db"})
+
+
+# --------------------------------------------------------------------------
+# Utility routes: health, robots, sitemap, errors
+# --------------------------------------------------------------------------
 @app.route("/healthz")
 def healthz():
     return "ok"
@@ -451,7 +1018,19 @@ def healthz():
 
 @app.route("/robots.txt")
 def robots():
-    return Response("User-agent: *\nDisallow: /admin\nDisallow: /cart\nDisallow: /checkout\n", mimetype="text/plain")
+    return Response("User-agent: *\nDisallow: /admin\nDisallow: /cart\nDisallow: /checkout\n"
+                    "Disallow: /pay\nDisallow: /track\nDisallow: /search\n"
+                    f"Sitemap: {abs_url('/sitemap.xml')}\n", mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    cat = catalog()
+    paths = ["/", "/contact"] + [f"/collections/{h}" for h in cat["collections"]] + \
+            [p["url"] for p in cat["products"]] + [f"/pages/{h}" for h in load_json("pages.json")]
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           + "".join(f"  <url><loc>{escape(abs_url(p))}</loc></url>\n" for p in paths) + "</urlset>\n")
+    return Response(xml, mimetype="application/xml")
 
 
 @app.errorhandler(404)
