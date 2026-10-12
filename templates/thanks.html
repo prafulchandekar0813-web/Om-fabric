@@ -4,11 +4,16 @@
   <p class="eyebrow">THANK YOU</p>
   <h1>Order #{{ order_number }} confirmed</h1>
   <div class="rte">
-    <p>Thanks, {{ order.name }}. We’ve received your order and will contact you at {{ order.email }} or {{ order.phone }} to confirm it.</p>
-    <p><strong>Payment:</strong> {{ order.payment_method }}<br>
+    <p>Thanks, {{ order.name }}. We’ve received your order and emailed a summary to {{ order.email }}.</p>
+    <p><strong>Payment:</strong> {{ 'Paid online ✓' if order.payment_status == 'paid' else order.payment_method }}<br>
        <strong>Delivering to:</strong> {{ order.address }}, {{ order.city }}, {{ order.state }} {{ order.pincode }}</p>
     {% for i in items %}<p>{{ i.quantity }} × {{ i.product }}{% if i.variant != 'Default Title' %} ({{ i.variant }}){% endif %} — {{ (i.unit_price * i.quantity) | money }}</p>{% endfor %}
-    <p>Shipping: {{ 'Free' if order.shipping == 0 else order.shipping | money }}<br><strong>Total: {{ order.total | money }}</strong></p>
+    <p>Subtotal: {{ order.subtotal | money }}<br>
+       {% if order.discount_amount %}Discount ({{ order.discount_code }}): -{{ order.discount_amount | money }}<br>{% endif %}
+       Shipping: {{ 'Free' if order.shipping == 0 else order.shipping | money }}<br>
+       {% if order.cod_fee %}COD fee: {{ order.cod_fee | money }}<br>{% endif %}
+       <strong>Total: {{ order.total | money }}</strong></p>
+    <p>Check progress any time on the <a href="{{ url_for('track') }}">Track order</a> page.</p>
   </div>
   <a class="button dark" href="{{ url_for('index') }}">Continue shopping</a>
 </section>

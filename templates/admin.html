@@ -2,23 +2,45 @@
 {% block content %}
 <section class="admin">
   <p class="eyebrow">OWNER VIEW</p>
+  <p class="note">
+    Online payments: <strong>{{ 'ON' if razorpay else 'OFF (set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)' }}</strong> ·
+    Emails: <strong>{{ 'ON' if smtp else 'OFF (set SMTP_HOST etc.)' }}</strong> ·
+    <a href="{{ url_for('admin_orders_csv') }}">Download orders (CSV)</a> ·
+    <a href="{{ url_for('admin_backup') }}">Download database backup</a> ·
+    <a href="#stock">Stock</a>
+  </p>
   <h2>Orders ({{ orders|length }})</h2>
   <table>
-    <tr><th>#</th><th>Placed</th><th>Customer</th><th>Ship to</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+    <tr><th>#</th><th>Placed (UTC)</th><th>Customer</th><th>Ship to</th><th>Items</th><th>Total</th><th>Payment</th><th>Status / tracking</th></tr>
     {% for o in orders %}
     <tr>
       <td>{{ o.number }}</td><td>{{ o.created_at }}</td>
       <td>{{ o.name }}<br>{{ o.email }}<br>{{ o.phone }}</td>
       <td>{{ o.address }}, {{ o.city }}, {{ o.state }} {{ o.pincode }}{% if o.notes %}<br><em>{{ o.notes }}</em>{% endif %}</td>
       <td>{% for i in o["items"] %}{{ i.quantity }} × {{ i.product }} ({{ i.variant }})<br>{% endfor %}</td>
-      <td>{{ o.total | money }}</td><td>{{ o.payment_method }}</td>
+      <td>{{ o.total | money }}{% if o.discount_code %}<br>code {{ o.discount_code }} (-{{ o.discount_amount | money }}){% endif %}</td>
+      <td>{{ o.payment_method }}<br><strong>{{ o.payment_status }}</strong>{% if o.razorpay_payment_id %}<br>{{ o.razorpay_payment_id }}{% endif %}{% if o.admin_note %}<br><em>{{ o.admin_note }}</em>{% endif %}</td>
       <td><form method="post" action="{{ url_for('admin_status', order_id=o.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <select name="status">{% for s in statuses %}<option{% if s == o.status %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
-        <button>Save</button></form></td>
+        <select name="status">{% for s in statuses %}<option{% if s == o.status %} selected{% endif %}>{{ s }}</option>{% endfor %}</select><br>
+        <input name="tracking" placeholder="Courier + tracking no." value="{{ o.tracking or '' }}" style="margin-top:6px;width:100%"><br>
+        <button style="margin-top:6px">Save</button></form></td>
     </tr>
     {% else %}<tr><td colspan="8">No orders yet.</td></tr>{% endfor %}
   </table>
+
+  <h2 id="stock">Stock</h2>
+  <form method="post" action="{{ url_for('admin_stock') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <table>
+      <tr><th>Product</th><th>Option</th><th>In stock</th></tr>
+      {% for p, v, left in counted %}
+      <tr><td>{{ p.title }}</td><td>{{ v.title }}</td><td><input type="number" min="0" name="stock_{{ v.id }}" value="{{ left }}" style="width:90px"></td></tr>
+      {% endfor %}
+    </table>
+    <button class="button dark" type="submit">Save stock</button>
+  </form>
+  <br>
   <h2>Messages ({{ messages|length }})</h2>
   <table>
     <tr><th>Received</th><th>From</th><th>Topic</th><th>Message</th></tr>

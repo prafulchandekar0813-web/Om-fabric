@@ -4,14 +4,21 @@
   <p class="eyebrow">THREAD &amp; CO. COLLECTION</p>
   <h1>{{ collection.title }}</h1>
   {% if collection.description %}<p class="collection-description">{{ collection.description }}</p>{% endif %}
+  <form class="toolbar" method="get" action="{{ url_for('collection', handle=collection.handle) }}">
+    <label for="sort">Sort by</label>
+    <select id="sort" name="sort" onchange="this.form.submit()">
+      {% for val, label in sort_options %}<option value="{{ val }}"{% if (sort or '') == val %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <noscript><button class="button" type="submit">Apply</button></noscript>
+  </form>
   <div class="product-grid">
     {% for product in products %}{% include "_product_card.html" %}{% else %}<p>No products yet.</p>{% endfor %}
   </div>
   {% if pages > 1 %}
   <nav class="pagination">
-    {% if page > 1 %}<a href="?page={{ page - 1 }}">← Previous</a>{% endif %}
+    {% if page > 1 %}<a href="{{ url_for('collection', handle=collection.handle, page=page - 1, sort=sort) }}">← Previous</a>{% endif %}
     Page {{ page }} of {{ pages }}
-    {% if page < pages %}<a href="?page={{ page + 1 }}">Next →</a>{% endif %}
+    {% if page < pages %}<a href="{{ url_for('collection', handle=collection.handle, page=page + 1, sort=sort) }}">Next →</a>{% endif %}
   </nav>
   {% endif %}
 </section>

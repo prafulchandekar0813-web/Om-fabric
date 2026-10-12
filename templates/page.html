@@ -3,6 +3,7 @@
 <section class="page-content">
   <p class="eyebrow">{{ site.shop_name }}</p>
   <h1>{{ page.title }}</h1>
+  {% if page.draft %}<p class="flash error" style="margin:0 0 24px">DRAFT — please review this page (ideally with a lawyer/accountant), edit it for your business, then delete the <code>"draft": true</code> line for this page in data/pages.json to remove this banner.</p>{% endif %}
   <div class="rte">{{ page.content | safe }}</div>
 </section>
 {% endblock %}

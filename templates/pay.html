@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-content">
+  <p class="eyebrow">SECURE PAYMENT</p>
+  <h1>Pay {{ order.total | money }}</h1>
+  <div class="rte">
+    <p>Order #{{ number }}. Please complete payment within 30 minutes — we’re holding your items until then.</p>
+    <p>Payments are processed securely by Razorpay (UPI, cards and netbanking). We never see your card or UPI details.</p>
+  </div>
+  <div id="pay" data-key="{{ key_id }}" data-amount="{{ order.total * 100 }}" data-order="{{ order.razorpay_order_id }}"
+       data-shop="{{ site.shop_name }}" data-desc="Order #{{ number }}" data-name="{{ order.name }}"
+       data-email="{{ order.email }}" data-phone="{{ order.phone }}"></div>
+  <button class="button dark" id="pay-btn" type="button">Pay now ↗</button>
+  <p id="pay-msg" class="note" role="status"></p>
+  <form id="verify" method="post" action="{{ url_for('pay_verify', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="razorpay_payment_id" id="rz_payment_id">
+    <input type="hidden" name="razorpay_order_id" id="rz_order_id">
+    <input type="hidden" name="razorpay_signature" id="rz_signature">
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="{{ url_for('static', filename='js/pay.js') }}"></script>
+{% endblock %}

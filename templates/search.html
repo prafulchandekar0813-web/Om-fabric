@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="products">
+  <p class="eyebrow">FIND SOMETHING</p>
+  <h1>Search</h1>
+  <form class="toolbar" method="get" action="{{ url_for('search') }}" role="search">
+    <label for="q">Search products</label>
+    <input id="q" name="q" value="{{ q }}" placeholder="e.g. linen shirt" autofocus>
+    <button class="button dark" type="submit">Search</button>
+  </form>
+  {% if q %}
+    <p class="note">{{ products | length }} result{{ '' if products | length == 1 else 's' }} for “{{ q }}”</p>
+    <div class="product-grid">{% for product in products %}{% include "_product_card.html" %}{% endfor %}</div>
+  {% endif %}
+</section>
+{% endblock %}

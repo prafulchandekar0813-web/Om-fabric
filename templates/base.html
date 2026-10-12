@@ -3,12 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{ page_title }}{% if site.shop_name not in page_title %} — {{ site.shop_name }}{% endif %}</title>
+  {% set desc = meta_description or site.meta_description %}
+  {% set full_title = page_title ~ ('' if site.shop_name in page_title else ' — ' ~ site.shop_name) %}
+  <title>{{ full_title }}</title>
+  <meta name="description" content="{{ desc }}">
+  {% if noindex %}<meta name="robots" content="noindex,nofollow">{% else %}<link rel="canonical" href="{{ abs_url(request.path) }}">{% endif %}
+  <meta property="og:site_name" content="{{ site.shop_name }}">
+  <meta property="og:title" content="{{ full_title }}">
+  <meta property="og:description" content="{{ desc }}">
+  <meta property="og:type" content="{{ 'product' if ld is defined else 'website' }}">
+  <meta property="og:url" content="{{ abs_url(request.path) }}">
+  {% set og = og_image or site.og_image %}{% if og %}<meta property="og:image" content="{{ abs_url(og | img_url) }}">{% endif %}
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
   <style>:root{--paper:{{ site.background_color }}}</style>
   <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
+  {% if ld is defined %}<script type="application/ld+json">{{ ld | tojson }}</script>{% endif %}
+  {% if site.analytics.ga4_id %}
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ site.analytics.ga4_id }}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config',{{ site.analytics.ga4_id | tojson }});</script>
+  {% endif %}
+  {% if site.analytics.plausible_domain %}<script defer data-domain="{{ site.analytics.plausible_domain }}" src="https://plausible.io/js/script.js"></script>{% endif %}
 </head>
 <body>
   <a class="skip-link" href="#MainContent">Skip to content</a>
@@ -20,7 +37,10 @@
     <nav class="main-nav" id="MainNav">
       {% for link in site.nav %}<a href="{{ link.url }}">{{ link.title }}</a>{% endfor %}
     </nav>
-    <a class="cart-link" href="{{ url_for('cart') }}">Bag ({{ cart_count }})</a>
+    <div class="header-actions">
+      <a class="cart-link" href="{{ url_for('search') }}">Search</a>
+      <a class="cart-link" href="{{ url_for('cart') }}">Bag ({{ cart_count }})</a>
+    </div>
   </header>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -33,7 +53,12 @@
     <a class="brand" href="{{ url_for('index') }}">{{ site.brand_text or site.shop_name }}</a>
     <p>{{ site.footer_tagline }}</p>
     <div class="footer-links">{% for link in site.footer_nav %}<a href="{{ link.url }}">{{ link.title }}</a>{% endfor %}</div>
+    {% set b = site.business %}
+    {% if b.legal_name or b.address or b.phone or b.gstin %}
+    <p class="business">{{ b.legal_name }}{% if b.address %} · {{ b.address }}{% endif %}{% if b.phone %} · {{ b.phone }}{% endif %}{% if b.gstin %} · GSTIN {{ b.gstin }}{% endif %}</p>
+    {% endif %}
     <small>© {{ now_year }} {{ site.shop_name }}</small>
   </footer>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,7 +1,7 @@
 <article class="product-card">
   <a class="product-image" href="{{ product.url }}">
     {% if product.featured_image %}<img src="{{ product.featured_image | img_url }}" alt="{{ product.title }}" loading="lazy" width="600" height="800">{% else %}<span>Add product image</span>{% endif %}
-    {% if product.compare_at_max > product.price %}<b class="sale">Sale</b>{% endif %}
+    {% if not product_available(product) %}<b class="sale">Sold out</b>{% elif product.compare_at_max > product.price %}<b class="sale">Sale</b>{% endif %}
   </a>
   <a class="product-title" href="{{ product.url }}">{{ product.title }}</a>
   <p>{{ product.price | money }} {% if product.compare_at_max > product.price %}<s>{{ product.compare_at_max | money }}</s>{% endif %}</p>

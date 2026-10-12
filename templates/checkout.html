@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">ALMOST THERE</p>
     <h1>Checkout</h1>
-    {% if errors.get('cart') %}<p class="field-error">{{ errors.cart }}</p>{% endif %}
+    {% if errors.get('cart') %}<p class="field-error">{{ errors.cart }} <a href="{{ url_for('cart') }}">Back to bag</a></p>{% endif %}
     <form method="post" action="{{ url_for('checkout') }}" novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="honeypot" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
@@ -27,12 +27,13 @@
 
       <label for="payment">Payment method</label>
       <select id="payment" name="payment">
-        {% for m in methods %}<option value="{{ m.id }}"{% if form.get('payment') == m.id %} selected{% endif %}>{{ m.label }}</option>{% endfor %}
+        {% for m in methods %}<option value="{{ m.id }}"{% if form.get('payment') == m.id %} selected{% endif %}>{{ m.label }}{% if m.id == 'cod' and cod_fee %} (+{{ cod_fee | money }} fee){% endif %}</option>{% endfor %}
       </select>{{ err('payment') }}
-      <p class="note">{{ methods[0].instructions }}</p>
+      <p class="note" id="payment-note">{% for m in methods %}<span data-for="{{ m.id }}"{% if not loop.first %} hidden{% endif %}>{{ m.instructions }}</span>{% endfor %}</p>
 
       <label for="notes">Order notes (optional)</label>
       <textarea id="notes" name="notes" rows="2">{{ form.get('notes','') }}</textarea>
+      <p class="note">By placing your order you agree to our <a href="{{ url_for('page', handle='terms') }}">Terms</a>, <a href="{{ url_for('page', handle='returns') }}">Returns policy</a> and <a href="{{ url_for('page', handle='privacy') }}">Privacy policy</a>.</p>
       <button class="button dark" type="submit">Place order ↗</button>
     </form>
   </div>
@@ -42,8 +43,10 @@
       <div class="line"><span>{{ l.quantity }} × {{ l.product.title }}{% if l.variant.title != 'Default Title' %} ({{ l.variant.title }}){% endif %}</span><span>{{ l.line_price | money }}</span></div>
     {% endfor %}
     <div class="summary-row"><span>Subtotal</span><span>{{ totals.subtotal | money }}</span></div>
+    {% if totals.discount %}<div class="summary-row"><span>Discount ({{ totals.code }})</span><span>-{{ totals.discount | money }}</span></div>{% endif %}
     <div class="summary-row"><span>Shipping</span><span>{{ 'Free' if totals.shipping == 0 else totals.shipping | money }}</span></div>
-    <div class="summary-row grand"><span>Total</span><span>{{ totals.total | money }}</span></div>
+    <div class="summary-row" id="cod-fee-row" data-fee="{{ cod_fee }}"{% if not totals.cod_fee %} hidden{% endif %}><span>COD fee</span><span>{{ cod_fee | money }}</span></div>
+    <div class="summary-row grand"><span>Total</span><span id="grand-total" data-base="{{ totals.total - totals.cod_fee }}">{{ totals.total | money }}</span></div>
   </aside>
 </section>
 {% endblock %}

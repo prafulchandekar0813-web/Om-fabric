@@ -7,22 +7,25 @@
   <div>
     <p class="eyebrow">{{ product.vendor }}</p>
     <h1>{{ product.title }}</h1>
-    <p class="price">{{ selected.price | money }}</p>
+    <p class="price">{{ selected.price | money }}{% if selected.compare_at_price and selected.compare_at_price > selected.price %} <s>{{ selected.compare_at_price | money }}</s>{% endif %}</p>
     <form action="{{ url_for('cart_add') }}" method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if not product.has_only_default_variant %}
         <label for="variant">Choose option</label>
         <select id="variant" name="id">
           {% for v in product.variants %}
-            <option value="{{ v.id }}" data-price="{{ v.price | money }}"{% if v.id == selected.id %} selected{% endif %}{% if not v.available %} disabled{% endif %}>{{ v.title }} — {{ v.price | money }}{% if not v.available %} (Sold out){% endif %}</option>
+            {% set left = stock_of(v) %}
+            <option value="{{ v.id }}" data-price="{{ v.price | money }}"{% if v.id == selected.id %} selected{% endif %}{% if not avail(v) %} disabled{% endif %}>{{ v.title }} — {{ v.price | money }}{% if not avail(v) %} (Sold out){% elif left is not none and left <= 5 %} (only {{ left }} left){% endif %}</option>
           {% endfor %}
         </select>
       {% else %}
         <input type="hidden" name="id" value="{{ selected.id }}">
+        {% set left = stock_of(selected) %}
+        {% if left is not none and 0 < left <= 5 %}<p class="note">Only {{ left }} left</p>{% endif %}
       {% endif %}
       <label for="qty">Quantity</label>
       <input id="qty" type="number" name="quantity" min="1" max="20" value="1">
-      <button class="button dark" type="submit" {% if not product.available %}disabled{% endif %}>{{ 'Add to bag' if product.available else 'Sold out' }}</button>
+      <button class="button dark" type="submit" {% if not product_available(product) %}disabled{% endif %}>{{ 'Add to bag' if product_available(product) else 'Sold out' }}</button>
     </form>
     <div class="description">{{ product.description | safe }}</div>
   </div>

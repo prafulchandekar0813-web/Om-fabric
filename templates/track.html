@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-content">
+  <p class="eyebrow">WHERE’S MY ORDER</p>
+  <h1>Track order</h1>
+  {% if not order %}
+  <form class="contact-form" method="post" action="{{ url_for('track') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if error %}<p class="field-error">{{ error }}</p>{% endif %}
+    <label for="number">Order number</label><input id="number" name="number" placeholder="e.g. 1001" inputmode="numeric" required>
+    <label for="temail">Email used at checkout</label><input id="temail" type="email" name="email" required>
+    <button class="button dark" type="submit">Track ↗</button>
+  </form>
+  {% else %}
+  <div class="rte">
+    <p><strong>Order #{{ 1000 + order.id }}</strong> — {{ status_labels[order.status] }}</p>
+    {% if order.status == 'cancelled' %}
+      <p>This order was cancelled. Questions? <a href="{{ url_for('contact') }}">Contact us</a>.</p>
+    {% else %}
+      <ol class="timeline">
+        {% set idx = steps.index(order.status) if order.status in steps else 0 %}
+        {% for s in steps %}<li class="{{ 'done' if loop.index0 <= idx else '' }}">{{ status_labels[s] }}</li>{% endfor %}
+      </ol>
+    {% endif %}
+    {% if order.tracking %}<p><strong>Courier / tracking:</strong> {{ order.tracking }}</p>{% endif %}
+    {% for i in items %}<p>{{ i.quantity }} × {{ i.product }}{% if i.variant != 'Default Title' %} ({{ i.variant }}){% endif %}</p>{% endfor %}
+    <p>Total: {{ order.total | money }} · {{ 'Paid online' if order.payment_status == 'paid' else order.payment_method }}</p>
+  </div>
+  <a class="button" href="{{ url_for('track') }}">Track another order</a>
+  {% endif %}
+</section>
+{% endblock %}

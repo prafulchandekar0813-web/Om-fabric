@@ -16,6 +16,8 @@
         <a href="{{ l.product.url }}">{{ l.product.title }}</a>
         {% if l.variant.title != 'Default Title' %}<p>{{ l.variant.title }}</p>{% endif %}
         <p>{{ l.line_price | money }}</p>
+        {% if not l.available %}<p class="field-error">Sold out — set Qty to 0 and update your bag.</p>
+        {% elif l.stock is not none and l.quantity > l.stock %}<p class="field-error">Only {{ l.stock }} left — please lower the quantity.</p>{% endif %}
         <label for="qty-{{ l.variant.id }}">Qty</label>
         <input id="qty-{{ l.variant.id }}" type="number" name="qty_{{ l.variant.id }}" value="{{ l.quantity }}" min="0" max="20">
         <p class="remove">Set Qty to 0 and press “Update bag” to remove.</p>
@@ -24,6 +26,7 @@
     {% endfor %}
     <div class="total">
       <div class="summary-row"><span>Subtotal</span><span>{{ totals.subtotal | money }}</span></div>
+      {% if totals.discount %}<div class="summary-row"><span>Discount ({{ totals.code }})</span><span>-{{ totals.discount | money }}</span></div>{% endif %}
       <div class="summary-row"><span>Shipping</span><span>{{ 'Free' if totals.shipping == 0 else totals.shipping | money }}</span></div>
       {% if totals.shipping %}<p class="note">Free shipping on orders over {{ totals.free_over | money }}.</p>{% endif %}
       <div class="summary-row grand"><span>Total</span><span>{{ totals.total | money }}</span></div>
@@ -32,6 +35,17 @@
       <button class="button" name="update" type="submit">Update bag</button>
       <button class="button dark" name="checkout" type="submit">Checkout ↗</button>
     </div>
+  </form>
+
+  <form class="discount-form" action="{{ url_for('cart_discount') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if totals.code %}
+      <p class="note">Code <strong>{{ totals.code }}</strong> applied.</p>
+      <button class="button" name="remove" value="1" type="submit">Remove code</button>
+    {% else %}
+      <label for="code">Discount code</label>
+      <div class="inline"><input id="code" name="code" autocomplete="off" maxlength="40"><button class="button" type="submit">Apply</button></div>
+    {% endif %}
   </form>
   {% endif %}
 </section>
