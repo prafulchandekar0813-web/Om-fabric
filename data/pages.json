@@ -1,0 +1,14 @@
+{
+  "about": {
+    "title": "About",
+    "content": "<p>Thread &amp; Co. makes easy-to-wear pieces for wherever the day takes you. Replace this text with your brand story.</p>"
+  },
+  "shipping": {
+    "title": "Shipping & Delivery",
+    "content": "<p>We ship across India. Orders are dispatched within 2–3 working days. Flat-rate shipping applies; orders above the free-shipping threshold ship free.</p>"
+  },
+  "returns": {
+    "title": "Returns",
+    "content": "<p>Not quite right? Write to us within 7 days of delivery and we’ll arrange an exchange or return. Replace with your own policy.</p>"
+  }
+}

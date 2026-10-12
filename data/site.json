@@ -1,0 +1,47 @@
+{
+  "shop_name": "Thread & Co.",
+  "brand_text": "thread&co.",
+  "background_color": "#f7f5f0",
+  "announcement_text": "A little less noise. A lot more style.",
+  "contact_email": "hello@example.com",
+  "footer_tagline": "Everyday, considered.",
+  "nav": [
+    {"title": "Shop", "url": "/collections/all"},
+    {"title": "New Arrivals", "url": "/collections/new-arrivals"},
+    {"title": "Sale", "url": "/collections/sale"},
+    {"title": "About", "url": "/pages/about"},
+    {"title": "Contact", "url": "/contact"}
+  ],
+  "footer_nav": [
+    {"title": "About", "url": "/pages/about"},
+    {"title": "Shipping & Delivery", "url": "/pages/shipping"},
+    {"title": "Returns", "url": "/pages/returns"},
+    {"title": "Contact", "url": "/contact"}
+  ],
+  "hero": {
+    "eyebrow": "THE EVERYDAY EDIT",
+    "heading": "Less noise.\nMore you.",
+    "body": "Easy-to-wear pieces for wherever the day takes you.",
+    "image": "img/hero.svg",
+    "button_label": "Shop the collection",
+    "button_link": "/collections/all"
+  },
+  "featured": {
+    "eyebrow": "THE GOOD STUFF",
+    "heading": "Everyday favourites",
+    "collection": "all",
+    "limit": 4
+  },
+  "shipping": {
+    "flat_rate": 80,
+    "free_over": 1999
+  },
+  "payment_methods": [
+    {"id": "cod", "label": "Cash on Delivery", "instructions": "Pay in cash when your order arrives."}
+  ],
+  "contact": {
+    "heading": "Let’s talk. We’re listening.",
+    "intro": "Questions about a piece, an order, or anything else? Send us a note.",
+    "topics": ["Product question", "Order support", "Returns and exchanges", "Feedback", "Other"]
+  }
+}

@@ -1,0 +1,322 @@
+{
+  "collections": [
+    {
+      "handle": "all",
+      "title": "All products",
+      "description": ""
+    },
+    {
+      "handle": "new-arrivals",
+      "title": "New Arrivals",
+      "description": "Fresh in this season."
+    },
+    {
+      "handle": "tops",
+      "title": "Tops",
+      "description": ""
+    },
+    {
+      "handle": "sale",
+      "title": "Sale",
+      "description": "Marked down, while it lasts."
+    }
+  ],
+  "products": [
+    {
+      "handle": "relaxed-linen-shirt",
+      "title": "Relaxed Linen Shirt",
+      "vendor": "thread&co.",
+      "description": "<p>A breathable, softly structured shirt in washed linen. Relaxed through the body with a slightly dropped shoulder.</p>",
+      "collections": [
+        "new-arrivals",
+        "tops",
+        "sale"
+      ],
+      "images": [
+        "img/products/relaxed-linen-shirt.svg"
+      ],
+      "variants": [
+        {
+          "id": "rls-s",
+          "title": "S",
+          "price": 1499,
+          "compare_at_price": 1999,
+          "available": true
+        },
+        {
+          "id": "rls-m",
+          "title": "M",
+          "price": 1499,
+          "compare_at_price": 1999,
+          "available": true
+        },
+        {
+          "id": "rls-l",
+          "title": "L",
+          "price": 1499,
+          "compare_at_price": 1999,
+          "available": true
+        },
+        {
+          "id": "rls-xl",
+          "title": "XL",
+          "price": 1499,
+          "compare_at_price": 1999,
+          "available": true
+        }
+      ]
+    },
+    {
+      "handle": "everyday-cotton-tee",
+      "title": "Everyday Cotton Tee",
+      "vendor": "thread&co.",
+      "description": "<p>Heavyweight combed cotton with a clean neckline. Made to be worn on repeat.</p>",
+      "collections": [
+        "new-arrivals",
+        "tops"
+      ],
+      "images": [
+        "img/products/everyday-cotton-tee.svg"
+      ],
+      "variants": [
+        {
+          "id": "ect-s",
+          "title": "S",
+          "price": 799,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "ect-m",
+          "title": "M",
+          "price": 799,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "ect-l",
+          "title": "L",
+          "price": 799,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "ect-xl",
+          "title": "XL",
+          "price": 799,
+          "compare_at_price": null,
+          "available": true
+        }
+      ]
+    },
+    {
+      "handle": "wide-leg-trouser",
+      "title": "Wide-Leg Trouser",
+      "vendor": "thread&co.",
+      "description": "<p>High-rise, wide-leg trouser with a drapey fall. Side pockets and a concealed zip.</p>",
+      "collections": [
+        "new-arrivals"
+      ],
+      "images": [
+        "img/products/wide-leg-trouser.svg"
+      ],
+      "variants": [
+        {
+          "id": "wlt-s",
+          "title": "S",
+          "price": 1899,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "wlt-m",
+          "title": "M",
+          "price": 1899,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "wlt-l",
+          "title": "L",
+          "price": 1899,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "wlt-xl",
+          "title": "XL",
+          "price": 1899,
+          "compare_at_price": null,
+          "available": false
+        }
+      ]
+    },
+    {
+      "handle": "ribbed-knit-vest",
+      "title": "Ribbed Knit Vest",
+      "vendor": "thread&co.",
+      "description": "<p>A fine-gauge ribbed vest that layers over everything.</p>",
+      "collections": [
+        "tops",
+        "sale"
+      ],
+      "images": [
+        "img/products/ribbed-knit-vest.svg"
+      ],
+      "variants": [
+        {
+          "id": "rkv-s",
+          "title": "S",
+          "price": 1299,
+          "compare_at_price": 1599,
+          "available": true
+        },
+        {
+          "id": "rkv-m",
+          "title": "M",
+          "price": 1299,
+          "compare_at_price": 1599,
+          "available": true
+        },
+        {
+          "id": "rkv-l",
+          "title": "L",
+          "price": 1299,
+          "compare_at_price": 1599,
+          "available": true
+        },
+        {
+          "id": "rkv-xl",
+          "title": "XL",
+          "price": 1299,
+          "compare_at_price": 1599,
+          "available": true
+        }
+      ]
+    },
+    {
+      "handle": "canvas-tote",
+      "title": "Canvas Tote",
+      "vendor": "thread&co.",
+      "description": "<p>Sturdy 12oz canvas with an inside zip pocket. Fits a laptop and a lunch.</p>",
+      "collections": [
+        "new-arrivals"
+      ],
+      "images": [
+        "img/products/canvas-tote.svg"
+      ],
+      "variants": [
+        {
+          "id": "ctt-default",
+          "title": "Default Title",
+          "price": 699,
+          "compare_at_price": null,
+          "available": true
+        }
+      ]
+    },
+    {
+      "handle": "overshirt-jacket",
+      "title": "Overshirt Jacket",
+      "vendor": "thread&co.",
+      "description": "<p>Boxy overshirt in a brushed cotton twill. Two chest pockets, corozo buttons.</p>",
+      "collections": [],
+      "images": [
+        "img/products/overshirt-jacket.svg"
+      ],
+      "variants": [
+        {
+          "id": "osj-s",
+          "title": "S",
+          "price": 2499,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "osj-m",
+          "title": "M",
+          "price": 2499,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "osj-l",
+          "title": "L",
+          "price": 2499,
+          "compare_at_price": null,
+          "available": true
+        },
+        {
+          "id": "osj-xl",
+          "title": "XL",
+          "price": 2499,
+          "compare_at_price": null,
+          "available": true
+        }
+      ]
+    },
+    {
+      "handle": "pleated-midi-skirt",
+      "title": "Pleated Midi Skirt",
+      "vendor": "thread&co.",
+      "description": "<p>Knife-pleated midi with an elasticated back waist. Lightweight and movement-friendly.</p>",
+      "collections": [
+        "sale"
+      ],
+      "images": [
+        "img/products/pleated-midi-skirt.svg"
+      ],
+      "variants": [
+        {
+          "id": "pms-s",
+          "title": "S",
+          "price": 1699,
+          "compare_at_price": 2199,
+          "available": true
+        },
+        {
+          "id": "pms-m",
+          "title": "M",
+          "price": 1699,
+          "compare_at_price": 2199,
+          "available": true
+        },
+        {
+          "id": "pms-l",
+          "title": "L",
+          "price": 1699,
+          "compare_at_price": 2199,
+          "available": true
+        },
+        {
+          "id": "pms-xl",
+          "title": "XL",
+          "price": 1699,
+          "compare_at_price": 2199,
+          "available": true
+        }
+      ]
+    },
+    {
+      "handle": "organic-socks-pack",
+      "title": "Organic Socks (3 pack)",
+      "vendor": "thread&co.",
+      "description": "<p>Three pairs of soft organic cotton socks. One size.</p>",
+      "collections": [
+        "new-arrivals"
+      ],
+      "images": [
+        "img/products/organic-socks-pack.svg"
+      ],
+      "variants": [
+        {
+          "id": "osp-default",
+          "title": "Default Title",
+          "price": 499,
+          "compare_at_price": null,
+          "available": true
+        }
+      ]
+    }
+  ]
+}
