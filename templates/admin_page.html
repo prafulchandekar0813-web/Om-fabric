@@ -1,0 +1,15 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<div class="head-row"><h2>{{ 'Add page' if is_new else 'Edit page' }}</h2><a href="{{ url_for('adm.pages') }}">← All pages</a></div>
+<form class="stack" method="post" action="{{ url_for('adm.page_form') if is_new else url_for('adm.page_form', key=key) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="title">Title</label><input id="title" name="title" value="{{ page.title }}" maxlength="100" required>
+  {% if is_new %}<label for="key">URL name (optional)</label><input id="key" name="key" value="{{ page.get('key','') }}" maxlength="60" placeholder="auto from title">
+  {% else %}<p class="note">Address: /pages/{{ key }}</p>{% endif %}
+  <label for="content">Content</label>
+  <textarea id="content" name="content" rows="16">{{ page.content }}</textarea>
+  <p class="note">Plain text works (blank line = new paragraph). Basic HTML allowed: &lt;p&gt; &lt;b&gt; &lt;i&gt; &lt;ul&gt;&lt;li&gt; &lt;a href&gt; &lt;h3&gt;.</p>
+  <label><input type="checkbox" name="draft" value="1"{% if page.draft %} checked{% endif %}> Draft — show a “please review” banner on this page</label>
+  <div class="btn-row" style="margin-top:24px"><button class="button dark" type="submit">Save page</button><a class="button" href="{{ url_for('adm.pages') }}">Cancel</a></div>
+</form>
+{% endblock %}

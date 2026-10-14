@@ -1,0 +1,24 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<div class="head-row"><h2>Products ({{ rows | length }})</h2><a class="button dark small" href="{{ url_for('adm.product_form') }}">+ Add product</a></div>
+<div class="table-wrap">
+<table>
+  <tr><th></th><th>Product</th><th>Price</th><th>Stock</th><th>Collections</th><th>Status</th><th></th></tr>
+  {% for r in rows %}{% set p = r.p %}
+  <tr>
+    <td style="width:60px">{% if p.images %}<img src="{{ p.images[0] | img_url }}" alt="" width="48" height="64" style="object-fit:cover">{% endif %}</td>
+    <td><a href="{{ url_for('adm.product_form', handle=p.handle) }}"><strong>{{ p.title }}</strong></a><br><small>{{ p.variants | length }} option{{ '' if p.variants | length == 1 else 's' }} · /products/{{ p.handle }}</small></td>
+    <td>{{ r.price | money }}</td>
+    <td>{% if r.stock is none %}<small>not counted</small>{% elif r.stock == 0 %}<span class="badge warn">0 — sold out</span>{% else %}{{ r.stock }}{% endif %}</td>
+    <td>{{ r.cols | join(', ') }}</td>
+    <td>{% if p.hidden %}<span class="badge warn">Hidden</span>{% else %}<span class="badge">Live</span>{% endif %}</td>
+    <td><div class="btn-row">
+      <a class="button small" href="{{ url_for('adm.product_form', handle=p.handle) }}">Edit</a>
+      <form method="post" action="{{ url_for('adm.product_duplicate', handle=p.handle) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button small">Duplicate</button></form>
+      <form method="post" action="{{ url_for('adm.product_delete', handle=p.handle) }}" data-confirm="Delete “{{ p.title }}”? This can’t be undone."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button small danger">Delete</button></form>
+    </div></td>
+  </tr>
+  {% else %}<tr><td colspan="7">No products yet — add your first one.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

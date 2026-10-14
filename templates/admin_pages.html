@@ -1,0 +1,14 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<div class="head-row"><h2>Pages</h2><a class="button dark small" href="{{ url_for('adm.page_form') }}">+ Add page</a></div>
+<p class="note">Pages like About, Shipping, Returns, Privacy and Terms. Link to them from the menus in Settings (e.g. <code>About | /pages/about</code>). Pages marked <strong>Draft</strong> show a red review banner to visitors.</p>
+<div class="table-wrap"><table>
+  <tr><th>Title</th><th>Address</th><th>Status</th><th></th></tr>
+  {% for key, pg in pages.items() %}
+  <tr><td><a href="{{ url_for('adm.page_form', key=key) }}"><strong>{{ pg.title }}</strong></a></td><td><a href="{{ url_for('page', handle=key) }}" target="_blank" rel="noopener">/pages/{{ key }}</a></td>
+    <td>{% if pg.draft %}<span class="badge warn">Draft</span>{% else %}<span class="badge">Published</span>{% endif %}</td>
+    <td><div class="btn-row"><a class="button small" href="{{ url_for('adm.page_form', key=key) }}">Edit</a>
+      <form method="post" action="{{ url_for('adm.page_delete', key=key) }}" data-confirm="Delete the page “{{ pg.title }}”?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button small danger">Delete</button></form></div></td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

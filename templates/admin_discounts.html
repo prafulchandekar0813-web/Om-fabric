@@ -1,0 +1,38 @@
+{% extends "admin_base.html" %}
+{% macro fields(c, d) %}
+  <div class="disc-grid">
+    <div><label>Code</label>{% if d %}<input name="code" value="{{ c }}" readonly>{% else %}<input name="code" placeholder="DIWALI10" maxlength="30" required style="text-transform:uppercase">{% endif %}</div>
+    <div><label>Type</label><select name="type">
+      <option value="percent"{% if d and d.type == 'percent' %} selected{% endif %}>Percent off</option>
+      <option value="flat"{% if d and d.type == 'flat' %} selected{% endif %}>Flat ₹ off</option>
+      <option value="free_shipping"{% if d and d.type == 'free_shipping' %} selected{% endif %}>Free shipping</option></select></div>
+    <div><label>Amount (% or ₹)</label><input name="value" inputmode="numeric" value="{{ d.value if d and d.value else '' }}" placeholder="10"></div>
+    <div><label>Min order ₹</label><input name="min_order" inputmode="numeric" value="{{ d.min_order if d and d.min_order else '' }}"></div>
+    <div><label>Expires</label><input type="date" name="expires" value="{{ d.expires if d and d.expires else '' }}"></div>
+    <div><label>Max uses</label><input name="max_uses" inputmode="numeric" value="{{ d.max_uses if d and d.max_uses else '' }}" placeholder="unlimited"></div>
+  </div>
+  <div class="disc-grid2">
+    <div><label>Note (only you see this)</label><input name="description" value="{{ d.description if d else '' }}" maxlength="120"></div>
+    <label class="check"><input type="checkbox" name="once_per_customer" value="1"{% if d and d.once_per_customer %} checked{% endif %}> One use per customer</label>
+    <label class="check"><input type="checkbox" name="active" value="1"{% if not d or d.active != false %} checked{% endif %}> Active</label>
+  </div>
+{% endmacro %}
+{% block admin %}
+<h2>Discount codes</h2>
+<p class="note">Customers type a code in their bag. Switch a code off to pause it, or delete it. Percent codes apply to the items total; shipping is not discounted.</p>
+<form class="stack card" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add">
+  <h3>Add a code</h3>{{ fields('', none) }}
+  <button class="button dark small" style="margin-top:14px">Add code</button>
+</form>
+<h3>Your codes ({{ codes | length }})</h3>
+{% for code, d in codes.items() %}
+<form class="stack card" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <p><strong>{{ code }}</strong>
+    {% if d.active == false %}<span class="badge warn">Paused</span>{% elif d.expires and d.expires < today %}<span class="badge warn">Expired</span>{% else %}<span class="badge">Live</span>{% endif %}
+    · used {{ used.get(code, 0) }}{% if d.max_uses %} of {{ d.max_uses }}{% endif %} time{{ '' if used.get(code, 0) == 1 else 's' }}</p>
+  {{ fields(code, d) }}
+  <div class="btn-row" style="margin-top:12px"><button class="button small dark" type="submit" name="action" value="save">Save</button>
+    <button class="button small danger" type="submit" name="action" value="delete" formnovalidate data-confirm-btn="Delete code {{ code }}?">Delete</button></div>
+</form>
+{% else %}<p>No codes yet.</p>{% endfor %}
+{% endblock %}

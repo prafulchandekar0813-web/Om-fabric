@@ -1,0 +1,15 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<h2>Stock</h2>
+<p class="note">Quick editor for counted items. To start counting an item, type a number in its Stock box on the product page.</p>
+<form method="post" action="{{ url_for('adm.inventory_save') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="table-wrap"><table>
+    <tr><th>Product</th><th>Option</th><th>In stock</th></tr>
+    {% for p, v, left in counted %}
+    <tr><td>{{ p.title }}{% if p.hidden %} <span class="badge warn">Hidden</span>{% endif %}</td><td>{{ v.title }}</td><td><input type="number" min="0" name="stock_{{ v.id }}" value="{{ left }}" style="width:100px"></td></tr>
+    {% else %}<tr><td colspan="3">No counted items yet.</td></tr>{% endfor %}
+  </table></div>
+  <button class="button dark" type="submit">Save stock</button>
+</form>
+{% endblock %}

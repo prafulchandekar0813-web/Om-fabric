@@ -1,0 +1,24 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<h2>Collections</h2>
+<p class="note">Collections group products (e.g. “Tops”, “Sale”). Put a product in a collection from its edit page. “All products” is built in. Link to a collection from your menus with <code>/collections/&lt;url-name&gt;</code>.</p>
+<form class="stack card" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add">
+  <h3>Add a collection</h3>
+  <div class="grid2"><div><label for="ct">Title</label><input id="ct" name="title" required maxlength="60"></div>
+  <div><label for="ch">URL name (optional)</label><input id="ch" name="handle" maxlength="60" placeholder="auto from title"></div></div>
+  <label for="cd">Description (optional)</label><input id="cd" name="description" maxlength="300">
+  <button class="button dark small" style="margin-top:14px">Add collection</button>
+</form>
+<div class="table-wrap"><table>
+  <tr><th>Title / description</th><th>URL</th><th>Products</th><th></th></tr>
+  {% for c in collections %}
+  <tr>
+    <td>{% if c.handle == 'all' %}<strong>{{ c.title }}</strong> <small>(built in — every product)</small>
+      {% else %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="save"><input type="hidden" name="handle" value="{{ c.handle }}">
+        <input name="title" value="{{ c.title }}" maxlength="60" aria-label="Title"><input name="description" value="{{ c.description }}" maxlength="300" placeholder="Description" aria-label="Description"><button class="button small">Save</button></form>{% endif %}</td>
+    <td>/collections/{{ c.handle }}</td><td>{{ counts.get(c.handle, 0) }}</td>
+    <td>{% if c.handle != 'all' %}<form method="post" data-confirm="Delete the collection “{{ c.title }}”? Products are kept."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="handle" value="{{ c.handle }}"><button class="button small danger">Delete</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

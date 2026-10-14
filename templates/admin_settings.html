@@ -1,0 +1,59 @@
+{% extends "admin_base.html" %}
+{% macro txt(name, label, max=200, hint='') %}<label for="{{ name }}">{{ label }}</label><input id="{{ name }}" name="{{ name }}" value="{{ form.get(name,'') }}" maxlength="{{ max }}">{% if hint %}<p class="note">{{ hint }}</p>{% endif %}{% endmacro %}
+{% block admin %}
+<h2>Store settings</h2>
+<form class="stack" method="post" enctype="multipart/form-data" action="{{ url_for('adm.settings') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card"><h3>Store basics</h3>
+    <div class="grid2"><div>{{ txt('shop_name','Shop name',80) }}</div><div>{{ txt('brand_text','Logo text (shown in header)',60,'e.g. thread&co.') }}</div></div>
+    {{ txt('announcement_text','Announcement bar text',200,'Leave blank to hide the bar.') }}
+    <div class="grid2"><div>{{ txt('contact_email','Contact email',200) }}</div><div>{{ txt('footer_tagline','Footer tagline',200) }}</div></div>
+    <div class="grid2"><div><label for="background_color">Page background colour</label><input id="background_color" type="color" name="background_color" value="{{ form.get('background_color','#f7f5f0') }}" style="height:44px;padding:2px"></div>
+    <div>{{ txt('meta_description','Search-engine description',300,'Shown in Google results for your home page.') }}</div></div>
+  </div>
+
+  <div class="card"><h3>Menus</h3>
+    <p class="note">One link per line, written as <code>Title | /link</code>. Use <code>/collections/all</code>, <code>/collections/&lt;name&gt;</code>, <code>/pages/&lt;name&gt;</code>, <code>/contact</code>, or a full https:// address.</p>
+    <label for="nav">Header menu</label><textarea id="nav" name="nav" rows="6">{{ form.get('nav','') }}</textarea>
+    <label for="footer_nav">Footer menu</label><textarea id="footer_nav" name="footer_nav" rows="8">{{ form.get('footer_nav','') }}</textarea>
+  </div>
+
+  <div class="card"><h3>Home page banner</h3>
+    <div class="grid2"><div>{{ txt('hero_eyebrow','Small heading above',60) }}</div><div>{{ txt('hero_heading','Big heading',120,'Press Enter-free; use a short line.') }}</div></div>
+    {{ txt('hero_body','Text under the heading',300) }}
+    <div class="grid2"><div>{{ txt('hero_button_label','Button label',40) }}</div><div>{{ txt('hero_button_link','Button link',300,'e.g. /collections/all') }}</div></div>
+    {% if hero_image %}<div class="thumbs"><div class="thumb"><img src="{{ hero_image | img_url }}" alt=""><label><input type="checkbox" name="remove_hero_image" value="1"> Remove</label></div></div>{% endif %}
+    <label for="hero_image">{{ 'Replace banner image' if hero_image else 'Banner image' }}</label>
+    <input id="hero_image" type="file" name="hero_image" accept="image/jpeg,image/png,image/webp,image/gif">
+  </div>
+
+  <div class="card"><h3>Home page product section</h3>
+    <div class="grid2"><div>{{ txt('featured_eyebrow','Small heading',60) }}</div><div>{{ txt('featured_heading','Heading',80) }}</div></div>
+    <div class="grid2"><div><label for="featured_collection">Show products from</label>
+      <select id="featured_collection" name="featured_collection">{% for c in collections %}<option value="{{ c.handle }}"{% if form.get('featured_collection') == c.handle %} selected{% endif %}>{{ c.title }}</option>{% endfor %}</select></div>
+      <div>{{ txt('featured_limit','How many (1–12)',2) }}</div></div>
+  </div>
+
+  <div class="card"><h3>Shipping &amp; Cash on Delivery</h3>
+    <div class="grid3"><div>{{ txt('ship_flat_rate','Shipping fee ₹',7) }}</div><div>{{ txt('ship_free_over','Free shipping over ₹',8) }}</div><div>{{ txt('ship_cod_fee','COD extra fee ₹ (0 = none)',5) }}</div></div>
+    {{ txt('cod_instructions','Text shown when COD is selected',200) }}
+  </div>
+
+  <div class="card"><h3>Contact page</h3>
+    {{ txt('contact_heading','Heading',120) }}{{ txt('contact_intro','Intro text',400) }}
+    <label for="contact_topics">Topics in the dropdown (one per line)</label><textarea id="contact_topics" name="contact_topics" rows="5">{{ form.get('contact_topics','') }}</textarea>
+  </div>
+
+  <div class="card"><h3>Business details <small>(shown in the footer)</small></h3>
+    <div class="grid2"><div>{{ txt('biz_legal_name','Legal / registered name',120) }}</div><div>{{ txt('biz_gstin','GSTIN',20) }}</div></div>
+    <div class="grid2"><div>{{ txt('biz_address','Address',250) }}</div><div>{{ txt('biz_phone','Phone',30) }}</div></div>
+  </div>
+
+  <div class="card"><h3>Analytics <small>(optional)</small></h3>
+    <div class="grid2"><div>{{ txt('ga4_id','Google Analytics ID',20,'Looks like G-XXXXXXXXXX') }}</div><div>{{ txt('plausible_domain','Plausible domain',100,'e.g. yourshop.in') }}</div></div>
+  </div>
+
+  <button class="button dark" type="submit">Save settings</button>
+</form>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<h2>Messages ({{ messages | length }})</h2>
+<div class="table-wrap"><table>
+  <tr><th>Received (UTC)</th><th>From</th><th>Topic</th><th>Message</th><th></th></tr>
+  {% for m in messages %}
+  <tr><td>{{ m.created_at }}</td><td>{{ m.name }}<br><a href="mailto:{{ m.email }}">{{ m.email }}</a></td><td>{{ m.topic }}</td><td style="white-space:pre-wrap">{{ m.body }}</td>
+    <td><form method="post" data-confirm="Delete this message?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ m.id }}"><button class="button small danger">Delete</button></form></td></tr>
+  {% else %}<tr><td colspan="5">No messages yet.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

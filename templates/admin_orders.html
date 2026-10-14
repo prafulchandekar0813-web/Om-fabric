@@ -1,0 +1,46 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<div class="stats">
+  <div class="stat"><b>{{ counts.get('new', 0) }}</b>New orders</div>
+  <div class="stat"><b>{{ today }}</b>Orders today</div>
+  <div class="stat"><b>{{ revenue | money }}</b>Total sales (excl. cancelled)</div>
+  <div class="stat"><b>{{ low | length }}</b>Low-stock items (≤3)</div>
+</div>
+<p class="note">
+  Emails: <strong>{{ 'ON' if smtp else 'OFF — set SMTP_HOST etc. to email customers' }}</strong>
+  {% if razorpay %} · Online payments: <strong>ON</strong>{% endif %} ·
+  <a href="{{ url_for('adm.orders_csv') }}">Download orders (CSV)</a> ·
+  <a href="{{ url_for('adm.backup') }}">Download database backup</a>
+</p>
+{% if low %}
+<p class="note"><strong>Running low:</strong>
+  {% for p, v, left in low %}{{ p.title }}{% if v.title != 'Default Title' %} ({{ v.title }}){% endif %}: {{ left }}{{ ', ' if not loop.last }}{% endfor %}
+  — <a href="{{ url_for('adm.inventory') }}">update stock</a></p>
+{% endif %}
+
+<h2>Orders</h2>
+<p class="filters">
+  <a href="{{ url_for('adm.orders') }}" class="{{ 'active' if not status else '' }}">All</a>
+  {% for s in statuses %}<a href="{{ url_for('adm.orders', status=s) }}" class="{{ 'active' if status == s else '' }}">{{ status_labels[s] }} ({{ counts.get(s, 0) }})</a>{% endfor %}
+</p>
+<div class="table-wrap">
+<table>
+  <tr><th>#</th><th>Placed (UTC)</th><th>Customer</th><th>Ship to</th><th>Items</th><th>Total</th><th>Payment</th><th>Status / tracking</th></tr>
+  {% for o in orders %}
+  <tr>
+    <td>{{ o.number }}</td><td>{{ o.created_at }}</td>
+    <td>{{ o.name }}<br>{{ o.email }}<br>{{ o.phone }}</td>
+    <td>{{ o.address }}, {{ o.city }}, {{ o.state }} {{ o.pincode }}{% if o.notes %}<br><em>{{ o.notes }}</em>{% endif %}</td>
+    <td>{% for i in o["items"] %}{{ i.quantity }} × {{ i.product }} ({{ i.variant }})<br>{% endfor %}</td>
+    <td>{{ o.total | money }}{% if o.discount_code %}<br>code {{ o.discount_code }} (-{{ o.discount_amount | money }}){% endif %}</td>
+    <td>{{ o.payment_method }}<br><strong>{{ o.payment_status }}</strong>{% if o.razorpay_payment_id %}<br>{{ o.razorpay_payment_id }}{% endif %}{% if o.admin_note %}<br><em>{{ o.admin_note }}</em>{% endif %}</td>
+    <td><form method="post" action="{{ url_for('adm.order_status', order_id=o.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select name="status">{% for s in statuses %}<option value="{{ s }}"{% if s == o.status %} selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select>
+      <input name="tracking" placeholder="Courier + tracking no." value="{{ o.tracking or '' }}" style="margin-top:6px">
+      <button class="button small" style="margin-top:6px">Save</button></form></td>
+  </tr>
+  {% else %}<tr><td colspan="8">No orders yet.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

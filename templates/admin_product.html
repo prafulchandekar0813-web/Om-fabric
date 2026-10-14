@@ -1,0 +1,61 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<div class="head-row"><h2>{{ 'Add product' if is_new else 'Edit product' }}</h2><a href="{{ url_for('adm.products') }}">← All products</a></div>
+<form class="stack" method="post" enctype="multipart/form-data"
+      action="{{ url_for('adm.product_form') if is_new else url_for('adm.product_form', handle=p.handle) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label for="title">Title</label>
+  <input id="title" name="title" value="{{ p.title }}" maxlength="120" required>
+  {% if is_new %}
+    <label for="handle">URL name <small>(optional — made from the title, e.g. linen-shirt)</small></label>
+    <input id="handle" name="handle" value="{{ p.handle }}" maxlength="60">
+  {% else %}<p class="note">Page address: /products/{{ p.handle }}</p>{% endif %}
+
+  <label for="vendor">Brand / vendor</label>
+  <input id="vendor" name="vendor" value="{{ p.vendor }}" maxlength="80">
+
+  <label for="description">Description</label>
+  <textarea id="description" name="description" rows="7">{{ p.description }}</textarea>
+  <p class="note">Plain text works (a blank line starts a new paragraph). Basic HTML is allowed: &lt;b&gt; &lt;i&gt; &lt;ul&gt;&lt;li&gt; &lt;a href&gt; &lt;h3&gt;.</p>
+
+  <h3>Price &amp; sizes / options</h3>
+  <p class="note">One row per size or option. For a product with no options, fill <strong>one row</strong> and leave its name blank. Leave <strong>Stock</strong> blank for “don’t count”. <strong>Was price</strong> shows a sale (must be higher than the price).</p>
+  <div class="variant-head"><span>Option name</span><span>Price ₹</span><span>Was ₹ (optional)</span><span>Stock</span><span>Status</span></div>
+  <div id="variants">
+    {% for r in rows %}
+    <div class="variant-row">
+      <input type="hidden" name="v_id" value="{{ r.get('id','') }}"><input type="hidden" name="v_orig" value="{{ r.get('orig','') }}">
+      <div><span class="vlabel">Option name</span><input name="v_title" placeholder="e.g. M" value="{{ r.get('title','') }}" maxlength="60" aria-label="Option name"></div>
+      <div><span class="vlabel">Price ₹</span><input name="v_price" inputmode="numeric" placeholder="1499" value="{{ r.get('price','') }}" aria-label="Price"></div>
+      <div><span class="vlabel">Was ₹ (optional)</span><input name="v_compare" inputmode="numeric" placeholder="1999" value="{{ r.get('compare','') }}" aria-label="Was price"></div>
+      <div><span class="vlabel">Stock (blank = not counted)</span><input name="v_stock" inputmode="numeric" placeholder="∞" value="{{ r.get('stock','') }}" aria-label="Stock"></div>
+      <div><span class="vlabel">Status</span><select name="v_avail" aria-label="Status"><option value="1"{% if r.get('avail','1') != '0' %} selected{% endif %}>Available</option><option value="0"{% if r.get('avail') == '0' %} selected{% endif %}>Sold out</option></select></div>
+    </div>
+    {% endfor %}
+  </div>
+  <button type="button" class="button small" id="add-variant">+ Add another option</button>
+
+  <h3>Photos</h3>
+  {% if p.images %}
+  <div class="thumbs">
+    {% for img in p.images %}
+    <div class="thumb"><img src="{{ img | img_url }}" alt="">
+      <label><input type="radio" name="main_image" value="{{ img }}"{% if loop.first %} checked{% endif %}> Main</label>
+      <label><input type="checkbox" name="remove_image" value="{{ img }}"> Remove</label></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <label for="new_images">Add photos</label>
+  <input id="new_images" type="file" name="new_images" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+  <p class="note">JPG, PNG, WebP or GIF, up to 8 MB each. They’re resized to 1600px and optimised automatically. Portrait (3:4) photos look best. The “Main” photo is shown on the shop pages.</p>
+
+  <h3>Collections &amp; visibility</h3>
+  <div class="checks">
+    {% for c in collections %}<label><input type="checkbox" name="collections" value="{{ c.handle }}"{% if c.handle in p.collections %} checked{% endif %}> {{ c.title }}</label>{% else %}<p class="note">No collections yet — add some under Collections.</p>{% endfor %}
+  </div>
+  <label><input type="checkbox" name="hidden" value="1"{% if p.hidden %} checked{% endif %}> Hide from store (draft — customers can’t see or buy it)</label>
+
+  <div class="btn-row" style="margin-top:28px"><button class="button dark" type="submit">Save product</button><a class="button" href="{{ url_for('adm.products') }}">Cancel</a></div>
+</form>
+{% endblock %}
