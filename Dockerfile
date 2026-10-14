@@ -3,7 +3,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-ENV PORT=8000 DATABASE_PATH=/data/store.db
+ENV PORT=8000 DATABASE_PATH=/data/store.db UPLOAD_DIR=/data/uploads
 VOLUME /data
 EXPOSE 8000
 CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT} --workers 2"]

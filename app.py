@@ -7,6 +7,7 @@ search, SEO files and a password-protected admin.
 Content lives in data/*.json. Orders, messages and stock live in SQLite.
 """
 import base64
+import copy
 import csv
 import hashlib
 import hmac
@@ -26,13 +27,15 @@ from email.message import EmailMessage
 from html import escape
 from pathlib import Path
 
-from flask import (Flask, Response, abort, flash, g, redirect, render_template,
-                   request, session, url_for)
+from flask import (Flask, Response, abort, flash, g, has_app_context, redirect,
+                   render_template, request, send_from_directory, session, url_for)
 from markupsafe import Markup
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = Path(os.environ.get("DATABASE_PATH", BASE_DIR / "store.db"))
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", BASE_DIR / "uploads"))
+CONTENT_DOCS = ["site.json", "products.json", "discounts.json", "pages.json"]
 PER_PAGE = 12
 MAX_QTY = 20
 PENDING_MINUTES = 30          # how long stock is held for an unpaid online order
@@ -47,41 +50,70 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") == "1",
-    MAX_CONTENT_LENGTH=256 * 1024,
+    MAX_CONTENT_LENGTH=24 * 1024 * 1024,      # admin image uploads
 )
 log = logging.getLogger("threadandco")
+if os.environ.get("TRUST_PROXY") == "1":       # running behind Render/nginx/etc: trust X-Forwarded-* headers
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 # --------------------------------------------------------------------------
-# Content loading (re-read automatically when a JSON file changes)
+# Content (site settings, products, discounts, pages) lives in the database so
+# the admin page can edit it. data/*.json only provides the starting content.
 # --------------------------------------------------------------------------
 _cache = {}
 
 
+def content_versions():
+    if "cv" not in g:
+        g.cv = {r["name"]: r["version"] for r in db().execute("SELECT name, version FROM content")}
+    return g.cv
+
+
 def load_json(name, default=None):
-    path = DATA_DIR / name
-    try:
-        mtime = path.stat().st_mtime
-    except FileNotFoundError:
+    """Read-only view of a content document (cached per process; do NOT mutate)."""
+    ver = content_versions().get(name)
+    if ver is None:
         if default is not None:
             return default
-        raise
+        raise KeyError(name)
     hit = _cache.get(name)
-    if not hit or hit[0] != mtime:
-        with open(path, encoding="utf-8") as f:
-            _cache[name] = (mtime, json.load(f))
+    if not hit or hit[0] != ver:
+        row = db().execute("SELECT json FROM content WHERE name=?", (name,)).fetchone()
+        _cache[name] = (ver, json.loads(row["json"]))
     return _cache[name][1]
 
 
+def read_doc(name, default=None):
+    """A fresh, private copy of a document — use this before editing."""
+    row = db().execute("SELECT json FROM content WHERE name=?", (name,)).fetchone()
+    if not row:
+        return copy.deepcopy(default) if default is not None else None
+    return json.loads(row["json"])
+
+
+def write_doc(name, data):
+    conn = db()
+    payload = json.dumps(data, ensure_ascii=False, indent=1)
+    cur = conn.execute("UPDATE content SET json=?, version=version+1, updated_at=CURRENT_TIMESTAMP WHERE name=?",
+                       (payload, name))
+    if cur.rowcount == 0:
+        conn.execute("INSERT INTO content (name, json) VALUES (?, ?)", (name, payload))
+    conn.commit()
+    g.pop("cv", None)
+
+
 def catalog():
-    """Products with derived, static fields (live stock is added at render time)."""
-    mtime = (DATA_DIR / "products.json").stat().st_mtime
+    """Visible products with derived fields (live stock is added at render time)."""
+    ver = content_versions().get("products.json")
     hit = _cache.get("_catalog")
-    if hit and hit[0] == mtime:
+    if hit and hit[0] == ver:
         return hit[1]
-    raw = load_json("products.json")
+    raw = copy.deepcopy(load_json("products.json"))
+    products = [p for p in raw["products"] if not p.get("hidden")]
     by_handle, variants = {}, {}
-    for p in raw["products"]:
+    for p in products:
         vs = p["variants"]
         p["price"] = min(v["price"] for v in vs)
         p["compare_at_max"] = max((v.get("compare_at_price") or 0) for v in vs)
@@ -92,8 +124,8 @@ def catalog():
         for v in vs:
             variants[v["id"]] = (p, v)
     cat = {"collections": {c["handle"]: c for c in raw["collections"]},
-           "products": raw["products"], "by_handle": by_handle, "variants": variants}
-    _cache["_catalog"] = (mtime, cat)
+           "products": products, "by_handle": by_handle, "variants": variants}
+    _cache["_catalog"] = (ver, cat)
     return cat
 
 
@@ -213,13 +245,24 @@ def init_db():
             variant_id TEXT PRIMARY KEY,
             stock INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS content (
+            name TEXT PRIMARY KEY,
+            json TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     have = {r[1] for r in conn.execute("PRAGMA table_info(orders)")}
     for col, decl in ORDER_EXTRA_COLUMNS.items():       # upgrades older databases in place
         if col not in have:
             conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {decl}")
+    for name in CONTENT_DOCS:                           # first run: copy starting content from data/*.json
+        if not conn.execute("SELECT 1 FROM content WHERE name=?", (name,)).fetchone() and (DATA_DIR / name).exists():
+            conn.execute("INSERT INTO content (name, json) VALUES (?, ?)",
+                         (name, (DATA_DIR / name).read_text(encoding="utf-8")))
     conn.commit()
     conn.close()
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 init_db()
@@ -257,8 +300,8 @@ def inventory():
         expire_pending()
         conn = db()
         rows = {r["variant_id"]: r["stock"] for r in conn.execute("SELECT variant_id, stock FROM inventory")}
-        missing = [(vid, v["stock"]) for vid, (_, v) in catalog()["variants"].items()
-                   if "stock" in v and vid not in rows]
+        missing = [(v["id"], v["stock"]) for p in load_json("products.json")["products"]
+                   for v in p["variants"] if "stock" in v and v["id"] not in rows]
         if missing:
             conn.executemany("INSERT OR IGNORE INTO inventory VALUES (?,?)", missing)
             conn.commit()
@@ -903,109 +946,32 @@ def contact():
 
 
 # --------------------------------------------------------------------------
-# Admin (set ADMIN_PASSWORD to enable; username is "admin")
+# Admin access (set ADMIN_PASSWORD to enable; username is "admin"). Pages: admin.py
 # --------------------------------------------------------------------------
+_failed_logins = {}
+
+
 def admin_ok():
     pw = os.environ.get("ADMIN_PASSWORD")
     if not pw:
         abort(404)
+    ip, now = request.remote_addr or "?", utcnow().timestamp()
+    recent = [t for t in _failed_logins.get(ip, []) if now - t < 900]
+    if len(recent) >= 10:
+        abort(Response("Too many failed logins. Try again in 15 minutes.", 429))
     auth = request.authorization
     good = (auth and auth.username == "admin"
             and hmac.compare_digest((auth.password or "").encode(), pw.encode()))
     if not good:
+        if auth:
+            _failed_logins[ip] = recent + [now]
         abort(Response("Login required", 401, {"WWW-Authenticate": 'Basic realm="Admin"'}))
+    _failed_logins.pop(ip, None)
 
 
-@app.route("/admin")
-def admin():
-    admin_ok()
-    inventory()                                           # also releases expired holds
-    orders = db().execute("SELECT * FROM orders ORDER BY id DESC LIMIT 300").fetchall()
-    orders = [dict(o, items=json.loads(o["items_json"]), number=1000 + o["id"]) for o in orders]
-    messages = db().execute("SELECT * FROM messages ORDER BY id DESC LIMIT 200").fetchall()
-    counted = [(p, v, stock_of(v)) for p in catalog()["products"] for v in p["variants"] if "stock" in v]
-    return render_template("admin.html", orders=orders, messages=messages, statuses=ORDER_STATUSES,
-                           counted=counted, razorpay=razorpay_enabled(),
-                           smtp=bool(os.environ.get("SMTP_HOST")), page_title="Admin", noindex=True)
-
-
-@app.post("/admin/order/<int:order_id>/status")
-def admin_status(order_id):
-    admin_ok()
-    conn = db()
-    row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
-    if not row:
-        abort(404)
-    status = request.form.get("status")
-    tracking = request.form.get("tracking", "").strip()[:200]
-    conn.execute("UPDATE orders SET tracking=? WHERE id=?", (tracking, order_id))
-    if status in ORDER_STATUSES and status != row["status"]:
-        if row["status"] == "cancelled":
-            flash("Cancelled orders can’t be reopened — ask the customer to place a new order.", "error")
-        else:
-            if status == "cancelled":
-                restock(conn, json.loads(row["items_json"]))
-            conn.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
-            g.pop("inv", None)
-            conn.commit()
-            fresh = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
-            if status in ("shipped", "cancelled"):
-                send_status_email(fresh, status)
-    conn.commit()
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/stock")
-def admin_stock():
-    admin_ok()
-    conn = db()
-    inventory()
-    for vid, (_, v) in catalog()["variants"].items():
-        raw = request.form.get(f"stock_{vid}")
-        if "stock" in v and raw is not None and raw.strip().isdigit():
-            conn.execute("UPDATE inventory SET stock=? WHERE variant_id=?", (int(raw), vid))
-    conn.commit()
-    g.pop("inv", None)
-    flash("Stock updated.")
-    return redirect(url_for("admin") + "#stock")
-
-
-def csv_safe(v):
-    v = "" if v is None else str(v)
-    return "'" + v if v[:1] in ("=", "+", "-", "@") else v
-
-
-@app.route("/admin/orders.csv")
-def admin_orders_csv():
-    admin_ok()
-    out = io.StringIO()
-    w = csv.writer(out)
-    w.writerow(["order", "placed_utc", "status", "payment_status", "payment_method", "name", "email",
-                "phone", "address", "city", "state", "pincode", "items", "subtotal", "discount_code",
-                "discount", "shipping", "cod_fee", "total", "tracking", "notes", "admin_note"])
-    for o in db().execute("SELECT * FROM orders ORDER BY id"):
-        items = "; ".join(f"{i['quantity']}x {i['product']} ({i['variant']})" for i in json.loads(o["items_json"]))
-        w.writerow([csv_safe(x) for x in [
-            1000 + o["id"], o["created_at"], o["status"], o["payment_status"], o["payment_method"], o["name"],
-            o["email"], o["phone"], o["address"], o["city"], o["state"], o["pincode"], items, o["subtotal"],
-            o["discount_code"], o["discount_amount"], o["shipping"], o["cod_fee"], o["total"], o["tracking"],
-            o["notes"], o["admin_note"]]])
-    return Response(out.getvalue(), mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=orders.csv"})
-
-
-@app.route("/admin/backup.db")
-def admin_backup():
-    admin_ok()
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
-    tmp.close()
-    dst = sqlite3.connect(tmp.name)
-    db().backup(dst)
-    dst.close()
-    data = Path(tmp.name).read_bytes()
-    os.unlink(tmp.name)
-    return Response(data, mimetype="application/octet-stream", headers={
-        "Content-Disposition": f"attachment; filename=store-{datetime.now():%Y%m%d-%H%M}.db"})
+@app.route("/uploads/<path:name>")
+def uploads(name):
+    return send_from_directory(UPLOAD_DIR, name, max_age=31536000)
 
 
 # --------------------------------------------------------------------------
@@ -1041,6 +1007,11 @@ def not_found(_e):
 @app.errorhandler(400)
 def bad_request(e):
     return render_template("error.html", code=400, message=getattr(e, "description", "Bad request."), page_title="Error"), 400
+
+
+import sys as _sys                       # noqa: E402  (admin.py gets this module; no circular import)
+import admin as _admin                   # noqa: E402
+_admin.init(_sys.modules[__name__])
 
 
 if __name__ == "__main__":
