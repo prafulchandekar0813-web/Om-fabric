@@ -110,5 +110,12 @@
     "address": "",
     "phone": "",
     "gstin": ""
+  },
+  "abandoned_cart": {
+    "enabled": true,
+    "first_after_hours": 2,
+    "send_second": true,
+    "second_after_hours": 24,
+    "discount_code": ""
   }
 }
