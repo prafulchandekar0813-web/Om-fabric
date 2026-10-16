@@ -27,9 +27,12 @@ from email.message import EmailMessage
 from html import escape
 from pathlib import Path
 
-from flask import (Flask, Response, abort, flash, g, has_app_context, redirect,
+from flask import (Flask, Response, abort, flash, g, has_app_context, has_request_context, redirect,
                    render_template, request, send_from_directory, session, url_for)
 from markupsafe import Markup
+
+import accounts as _accounts          # customer accounts (module has no import of app.py)
+import carts as _carts                # abandoned-cart tracking + reminder emails
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -219,14 +222,11 @@ ORDER_EXTRA_COLUMNS = {
     "payment_status": "TEXT DEFAULT 'cod'", "razorpay_order_id": "TEXT",
     "razorpay_payment_id": "TEXT", "discount_code": "TEXT",
     "discount_amount": "INTEGER DEFAULT 0", "cod_fee": "INTEGER DEFAULT 0",
-    "tracking": "TEXT", "admin_note": "TEXT",
+    "tracking": "TEXT", "admin_note": "TEXT", "customer_id": "INTEGER",
 }
 
 
-def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.executescript("""
+SCHEMA = """
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -251,17 +251,77 @@ def init_db():
             version INTEGER NOT NULL DEFAULT 1,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
-    """)
-    have = {r[1] for r in conn.execute("PRAGMA table_info(orders)")}
-    for col, decl in ORDER_EXTRA_COLUMNS.items():       # upgrades older databases in place
-        if col not in have:
-            conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {decl}")
-    for name in CONTENT_DOCS:                           # first run: copy starting content from data/*.json
-        if not conn.execute("SELECT 1 FROM content WHERE name=?", (name,)).fetchone() and (DATA_DIR / name).exists():
-            conn.execute("INSERT INTO content (name, json) VALUES (?, ?)",
-                         (name, (DATA_DIR / name).read_text(encoding="utf-8")))
-    conn.commit()
-    conn.close()
+        CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT, phone TEXT,
+            password_hash TEXT NOT NULL,
+            pw_version INTEGER NOT NULL DEFAULT 1,
+            email_verified INTEGER NOT NULL DEFAULT 0,
+            cart_reminders INTEGER NOT NULL DEFAULT 1,
+            address TEXT, city TEXT, state TEXT, pincode TEXT,
+            last_login_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS auth_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL,
+            purpose TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            used_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS carts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT NOT NULL UNIQUE,
+            restore_token TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL,
+            customer_id INTEGER,
+            items_json TEXT NOT NULL,
+            subtotal INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            reminders_sent INTEGER NOT NULL DEFAULT 0,
+            fail_count INTEGER NOT NULL DEFAULT 0,
+            last_reminder_at TEXT,
+            reminder_code TEXT,
+            clicked_at TEXT,
+            recovered_order_id INTEGER,
+            created_at TEXT, updated_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS carts_status ON carts (status, updated_at);
+        CREATE INDEX IF NOT EXISTS carts_email ON carts (email);
+        CREATE TABLE IF NOT EXISTS email_suppressions (
+            email TEXT PRIMARY KEY,
+            reason TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+    """
+
+
+def init_db():
+    """Create/upgrade tables. Safe when several workers start at the same moment (one waits for the other)."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=60, isolation_level=None)      # autocommit; we manage the transaction
+    try:
+        conn.execute("BEGIN IMMEDIATE")                                    # takes the write lock: others wait here
+        for stmt in (x.strip() for x in SCHEMA.split(";")):
+            if stmt:
+                conn.execute(stmt)
+        have = {r[1] for r in conn.execute("PRAGMA table_info(orders)")}
+        for col, decl in ORDER_EXTRA_COLUMNS.items():                      # upgrades older databases in place
+            if col not in have:
+                conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {decl}")
+        for name in CONTENT_DOCS:                                          # first run: starting content from data/*.json
+            if (DATA_DIR / name).exists():
+                conn.execute("INSERT OR IGNORE INTO content (name, json) VALUES (?, ?)",
+                             (name, (DATA_DIR / name).read_text(encoding="utf-8")))
+        conn.execute("COMMIT")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -425,17 +485,47 @@ def cart_totals(lines, payment_id=None, email=None):
             "count": sum(l["quantity"] for l in lines), "free_over": cfg["free_over"]}
 
 
+_throttle_hits = {}
+
+
+def throttle(key, limit, window_seconds):
+    """Allow at most `limit` hits per `window_seconds` for `key` (in-memory, per process)."""
+    now = utcnow().timestamp()
+    hits = [t for t in _throttle_hits.get(key, []) if now - t < window_seconds]
+    if len(hits) >= limit:
+        _throttle_hits[key] = hits
+        return False
+    _throttle_hits[key] = hits + [now]
+    if len(_throttle_hits) > 20000:                       # keep memory bounded
+        for k in [k for k, v in _throttle_hits.items() if not v or now - v[-1] > window_seconds][:5000]:
+            _throttle_hits.pop(k, None)
+    return True
+
+
+def site_url():
+    """Public base URL for links in emails: SITE_URL, or the current request's address."""
+    base = os.environ.get("SITE_URL")
+    if base:
+        return base.rstrip("/")
+    if has_request_context():
+        return request.url_root.rstrip("/")
+    return None
+
+
 @app.context_processor
 def inject_globals():
     return {"site": load_json("site.json"),
             "cart_count": sum(session.get("cart", {}).values()),
             "csrf_token": csrf_token, "now_year": datetime.now().year,
-            "sort_options": SORT_OPTIONS}
+            "sort_options": SORT_OPTIONS, "customer": _accounts.current_customer()}
+
+
+CSRF_EXEMPT = {"razorpay_webhook", "carts.unsubscribe_post", "carts.task"}
 
 
 @app.before_request
 def csrf_protect():
-    if request.method == "POST" and request.endpoint != "razorpay_webhook":
+    if request.method == "POST" and request.endpoint not in CSRF_EXEMPT:
         sent = request.form.get("csrf_token", "")
         if not sent or not hmac.compare_digest(sent, session.get("csrf", "")):
             abort(400, "Your session expired. Please go back, refresh and try again.")
@@ -452,31 +542,44 @@ def security_headers(resp):
 # --------------------------------------------------------------------------
 # Email (sent in the background; only if SMTP_* env vars are set)
 # --------------------------------------------------------------------------
-def send_email(to, subject, body, reply_to=None):
+def smtp_configured():
+    return bool(os.environ.get("SMTP_HOST"))
+
+
+def send_email_now(to, subject, body, reply_to=None, html=None, headers=None):
+    """Send one email and wait. Returns True on success. Used where the result matters."""
     host = os.environ.get("SMTP_HOST")
     if not host or not to:
         log.info("(email not sent — SMTP not configured) to=%s subject=%s", to, subject)
-        return
+        return False
     sender = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or to
-    port = int(os.environ.get("SMTP_PORT", 587))
-    user, password = os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASSWORD", "")
+    try:
+        msg = EmailMessage()
+        msg["Subject"], msg["To"], msg["From"] = subject, to, sender
+        if reply_to:
+            msg["Reply-To"] = reply_to
+        for k, v in (headers or {}).items():
+            msg[k] = v
+        msg.set_content(body)
+        if html:
+            msg.add_alternative(html, subtype="html")
+        with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", 587)), timeout=15) as s_:
+            s_.starttls()
+            if os.environ.get("SMTP_USER"):
+                s_.login(os.environ["SMTP_USER"], os.environ.get("SMTP_PASSWORD", ""))
+            s_.send_message(msg)
+        return True
+    except Exception:                                   # an email problem must never break an order
+        log.exception("Could not send email to %s", to)
+        return False
 
-    def _send():
-        try:
-            msg = EmailMessage()
-            msg["Subject"], msg["To"], msg["From"] = subject, to, sender
-            if reply_to:
-                msg["Reply-To"] = reply_to
-            msg.set_content(body)
-            with smtplib.SMTP(host, port, timeout=15) as s:
-                s.starttls()
-                if user:
-                    s.login(user, password)
-                s.send_message(msg)
-        except Exception:                       # an email problem must never break an order
-            log.exception("Could not send email to %s", to)
 
-    threading.Thread(target=_send, daemon=True).start()
+def send_email(to, subject, body, reply_to=None, html=None, headers=None):
+    """Fire-and-forget (background thread); only if SMTP_* env vars are set."""
+    if not smtp_configured() or not to:
+        log.info("(email not sent — SMTP not configured) to=%s subject=%s", to, subject)
+        return
+    threading.Thread(target=send_email_now, args=(to, subject, body, reply_to, html, headers), daemon=True).start()
 
 
 def owner_email():
@@ -712,6 +815,7 @@ def cart_add():
         flash(f"Only {left} available — we’ve added what we have.", "error")
     cart_data[vid] = new
     session["cart"] = cart_data
+    _carts.track_cart()
     return redirect(url_for("cart"))
 
 
@@ -730,6 +834,7 @@ def cart_update():
         if qty > 0:
             cart_data[vid] = min(qty, MAX_QTY)
     session["cart"] = cart_data
+    _carts.track_cart()
     if "checkout" in request.form and cart_data:
         return redirect(url_for("checkout"))
     return redirect(url_for("cart"))
@@ -771,9 +876,13 @@ def checkout():
 
     if request.method == "POST":
         form = {k: request.form.get(k, "").strip() for k in
-                ["name", "email", "phone", "address", "city", "state", "pincode", "notes", "payment"]}
+                ["name", "email", "phone", "address", "city", "state", "pincode", "notes", "payment",
+                 "remind", "save_address"]}
         if request.form.get("website"):                  # honeypot: bots fill this in
             return redirect(url_for("index"))
+        cust = _accounts.current_customer()
+        if not cust and form["remind"] == "1" and EMAIL_RE.match(form["email"]):
+            _carts.capture_guest(form["email"])          # fallback if the page's script didn't run
         if len(form["name"]) < 2: errors["name"] = "Please enter your name."
         if not EMAIL_RE.match(form["email"]): errors["email"] = "Please enter a valid email."
         if not PHONE_RE.match(form["phone"]): errors["phone"] = "Enter a 10-digit Indian mobile number."
@@ -807,13 +916,14 @@ def checkout():
                 cur = conn.execute(
                     """INSERT INTO orders (name,email,phone,address,city,state,pincode,notes,
                        payment_method,payment_status,status,discount_code,discount_amount,cod_fee,
-                       items_json,subtotal,shipping,total)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       items_json,subtotal,shipping,total,customer_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (form["name"], form["email"], form["phone"], form["address"], form["city"],
                      form["state"], form["pincode"], form["notes"], method["label"],
                      "pending" if online else "cod", "pending_payment" if online else "new",
                      totals["code"], totals["discount"], totals["cod_fee"],
-                     json.dumps(items), totals["subtotal"], totals["shipping"], totals["total"]))
+                     json.dumps(items), totals["subtotal"], totals["shipping"], totals["total"],
+                     cust["id"] if cust else None))
                 conn.commit()
                 order_id = cur.lastrowid
                 if online:
@@ -835,6 +945,10 @@ def checkout():
                     session["cart"] = {}
                     session.pop("discount", None)
                     session["last_order"] = order_id
+                    if cust and form["save_address"] == "1":
+                        _accounts.save_address(cust["id"], form)
+                    _carts.mark_recovered(order_id, form["email"])
+                    session.pop("cart_token", None)
                     if online:
                         return redirect(url_for("pay", order_id=order_id))
                     send_order_emails(order_id)
@@ -844,10 +958,14 @@ def checkout():
         totals = cart_totals(lines, methods[0]["id"])
         if totals["discount_error"]:
             flash(totals["discount_error"], "error")
+        cust = _accounts.current_customer()
+        if cust:
+            form = _accounts.checkout_prefill(cust)
+    remind_on = (form.get("remind") == "1") if request.method == "POST" else bool(session.get("cart_email"))
     shown = cart_totals(lines, form.get("payment") or methods[0]["id"], form.get("email"))
     return render_template("checkout.html", lines=lines, totals=shown, methods=methods, form=form,
                            errors=errors, cod_fee=load_json("site.json")["shipping"].get("cod_fee", 0),
-                           page_title="Checkout", noindex=True)
+                           remind_on=remind_on, page_title="Checkout", noindex=True)
 
 
 @app.route("/pay/<int:order_id>")
@@ -1012,6 +1130,8 @@ def bad_request(e):
 import sys as _sys                       # noqa: E402  (admin.py gets this module; no circular import)
 import admin as _admin                   # noqa: E402
 _admin.init(_sys.modules[__name__])
+_accounts.init(_sys.modules[__name__])
+_carts.init(_sys.modules[__name__])
 
 
 if __name__ == "__main__":

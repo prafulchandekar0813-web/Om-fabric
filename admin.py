@@ -681,6 +681,65 @@ def page_delete(key):
 
 
 # --------------------------------------------------------------------------
+# Customers (accounts)
+# --------------------------------------------------------------------------
+@bp.route("/customers", methods=["GET", "POST"])
+def customers():
+    conn = db()
+    if request.method == "POST":
+        cid, action = request.form.get("id", type=int), request.form.get("action")
+        row = conn.execute("SELECT * FROM customers WHERE id=?", (cid,)).fetchone() if cid else None
+        if not row:
+            flash("Customer not found.", "error")
+        elif action == "verify":
+            conn.execute("UPDATE customers SET email_verified=1 WHERE id=?", (cid,))
+            conn.commit()
+            flash(f"Marked {row['email']} as verified.")
+        elif action == "delete":
+            core._accounts.delete_customer(conn, cid)
+            flash(f"Deleted the account for {row['email']}. Their past orders are kept, unlinked.")
+        return redirect(url_for("adm.customers", q=request.args.get("q") or None))
+    q = request.args.get("q", "").strip()[:80]
+    like = f"%{q}%"
+    rows = conn.execute(
+        """SELECT c.*, (SELECT COUNT(*) FROM orders o WHERE o.customer_id=c.id) AS orders,
+                  (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.customer_id=c.id
+                     AND o.status NOT IN ('cancelled','pending_payment')) AS spent
+           FROM customers c WHERE (?='' OR c.email LIKE ? OR c.name LIKE ?) ORDER BY c.id DESC LIMIT 300""",
+        (q, like, like)).fetchall()
+    total = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+    return render("admin_customers.html", "customers", customers=rows, q=q, total=total)
+
+
+# --------------------------------------------------------------------------
+# Abandoned carts
+# --------------------------------------------------------------------------
+@bp.route("/carts")
+def carts():
+    names = {v["id"]: (p["title"] + ("" if v["title"] == "Default Title" else f" ({v['title']})"))
+             for p in core.read_doc("products.json")["products"] for v in p["variants"]}
+    rows = []
+    for r in db().execute("SELECT * FROM carts ORDER BY updated_at DESC LIMIT 100").fetchall():
+        items = json.loads(r["items_json"])
+        rows.append(dict(r, summary=", ".join(f"{q} × {names.get(v, 'removed item')}" for v, q in items.items())))
+    from carts import config
+    return render("admin_carts.html", "carts", rows=rows, stats=core._carts.stats(), cfg=config(),
+                  smtp=core.smtp_configured(), site_url=core.site_url(),
+                  cron=bool(os.environ.get("CRON_SECRET")), scheduler=os.environ.get("ENABLE_SCHEDULER") == "1")
+
+
+@bp.post("/carts/run")
+def carts_run():
+    res = core._carts.run_job()
+    if "skipped" in res:
+        flash("Nothing sent — " + res["skipped"], "error")
+    else:
+        flash(f"Reminder run finished: {res['sent']} sent, {res['recovered']} already ordered, "
+              f"{res['retired']} old bags retired, {res['failed']} failed.")
+    return redirect(url_for("adm.carts"))
+
+
+# --------------------------------------------------------------------------
 # Messages
 # --------------------------------------------------------------------------
 @bp.route("/messages", methods=["GET", "POST"])
@@ -703,6 +762,8 @@ def site_to_form(site):
     hero, feat, ship, biz, an, ct = (site["hero"], site["featured"], site["shipping"], site["business"],
                                      site["analytics"], site["contact"])
     cod = next((m for m in site["payment_methods"] if m["id"] == "cod"), {})
+    ac = dict({"enabled": True, "first_after_hours": 2, "send_second": True, "second_after_hours": 24,
+               "discount_code": ""}, **site.get("abandoned_cart", {}))
     return {"shop_name": site["shop_name"], "brand_text": site.get("brand_text", ""),
             "announcement_text": site.get("announcement_text", ""), "contact_email": site["contact_email"],
             "footer_tagline": site.get("footer_tagline", ""), "background_color": site["background_color"],
@@ -718,7 +779,10 @@ def site_to_form(site):
             "contact_heading": ct["heading"], "contact_intro": ct["intro"], "contact_topics": "\n".join(ct["topics"]),
             "biz_legal_name": biz.get("legal_name", ""), "biz_address": biz.get("address", ""),
             "biz_phone": biz.get("phone", ""), "biz_gstin": biz.get("gstin", ""),
-            "ga4_id": an.get("ga4_id", ""), "plausible_domain": an.get("plausible_domain", "")}
+            "ga4_id": an.get("ga4_id", ""), "plausible_domain": an.get("plausible_domain", ""),
+            **{"ac_enabled": "1" if ac["enabled"] else "", "ac_first": ac["first_after_hours"],
+               "ac_second_on": "1" if ac["send_second"] else "", "ac_second": ac["second_after_hours"],
+               "ac_code": ac["discount_code"]}}
 
 
 @bp.route("/settings", methods=["GET", "POST"])
@@ -754,6 +818,16 @@ def settings():
         pl = g_("plausible_domain")
         if pl and not re.fullmatch(r"[a-z0-9.-]{3,100}", pl):
             errors.append("Plausible domain should look like yourshop.in (or leave blank).")
+        discounts_doc = core.read_doc("discounts.json", {})
+        ac_present = "ac_first" in f                  # an older cached settings page won't send these: keep current
+        ac_first, ac_second = parse_int(f.get("ac_first"), 1, 72), parse_int(f.get("ac_second"), 2, 168)
+        ac_second_on = f.get("ac_second_on") == "1"
+        if ac_present and (ac_first is None or ac_second is None):
+            errors.append("Cart-reminder delays must be whole hours (first 1–72, second 2–168).")
+        elif ac_present and ac_second_on and ac_second <= ac_first:
+            errors.append("The second cart reminder must be later than the first.")
+        if ac_present and g_("ac_code") and g_("ac_code") not in discounts_doc:
+            errors.append("Choose a discount code from the list for the second reminder (or none).")
         for k in ("hero_button_link",):
             if g_(k) and not re.match(r"^(/|https?://)", g_(k)):
                 errors.append("The hero button link must start with / or https://")
@@ -761,7 +835,7 @@ def settings():
             for e in errors:
                 flash(e, "error")
             return render("admin_settings.html", "settings", form=f.to_dict(), collections=cols,
-                          hero_image=site["hero"].get("image")), 400
+                          codes=list(discounts_doc), hero_image=site["hero"].get("image")), 400
 
         site.update(shop_name=g_("shop_name", 80), brand_text=g_("brand_text", 60), announcement_text=g_("announcement_text"),
                     contact_email=g_("contact_email"), footer_tagline=g_("footer_tagline"),
@@ -789,10 +863,14 @@ def settings():
         site["business"] = {"legal_name": g_("biz_legal_name", 120), "address": g_("biz_address", 250),
                             "phone": g_("biz_phone", 30), "gstin": g_("biz_gstin", 20)}
         site["analytics"] = {"ga4_id": ga4, "plausible_domain": pl}
+        if ac_present:
+            site["abandoned_cart"] = {"enabled": f.get("ac_enabled") == "1", "first_after_hours": ac_first,
+                                      "send_second": ac_second_on, "second_after_hours": ac_second,
+                                      "discount_code": g_("ac_code")}
         core.write_doc("site.json", site)
         if hero.get("image") != old_hero:
             delete_upload_if_unused(old_hero)
         flash("Settings saved.")
         return redirect(url_for("adm.settings"))
     return render("admin_settings.html", "settings", form=site_to_form(site), collections=cols,
-                  hero_image=site["hero"].get("image"))
+                  codes=list(core.read_doc("discounts.json", {})), hero_image=site["hero"].get("image"))
