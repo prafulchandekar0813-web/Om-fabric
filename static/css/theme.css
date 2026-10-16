@@ -77,3 +77,25 @@
 
 .variant-row .vlabel{display:none;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px}
 @media(max-width:900px){.variant-row .vlabel{display:block}.variant-row{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line)}}
+
+/* ---- Customer accounts ---- */
+.auth{max-width:520px;margin:0 auto;padding:65px 5vw 100px}.auth.wide{max-width:900px}
+.auth h1{font:500 clamp(2.2rem,5vw,3.6rem)/1 Manrope,sans-serif;letter-spacing:-.06em;margin:0 0 22px}
+.auth h2{font:600 1.15rem Manrope,sans-serif;margin:0 0 10px}
+.auth label{display:block;font-size:12px;font-weight:600;margin:16px 0 6px}
+.auth label small{font-weight:400;color:var(--muted)}
+.auth label.check,.checkout label.check{display:flex;gap:8px;align-items:flex-start;font-weight:500;line-height:1.5}
+.auth input:not([type=checkbox]),.auth textarea{width:100%;border:1px solid #d5d1c8;background:transparent;padding:12px;font:inherit;font-size:13px;border-radius:0}
+.auth input[disabled]{opacity:.6}
+.auth .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.auth .button{margin-top:22px}.auth .note{font-size:12px;color:var(--muted);line-height:1.7;margin:10px 0}
+.auth form.inline{display:inline;margin:0}.auth form.inline .button{margin:0 0 0 8px}
+.linklike{background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer;color:inherit}
+.callout{background:var(--soft);padding:16px 18px;font-size:13px;margin:18px 0}
+.panel{background:var(--soft);padding:clamp(18px,3vw,30px);margin:0 0 20px}
+.panel .button.danger{border:1px solid #a3382b;color:#a3382b;background:transparent}
+.orders-table{width:100%;border-collapse:collapse;font-size:13px}.orders-table th,.orders-table td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line)}
+.auth .table-wrap{overflow-x:auto}
+@media(max-width:600px){.auth .two{grid-template-columns:1fr}.header-actions{gap:12px}}
+.checklist{list-style:none;padding:0;margin:0 0 14px;font-size:13px;line-height:1.9}.checklist li:before{content:"✗ ";color:#a3382b;font-weight:700}.checklist li.ok:before{content:"✓ ";color:#2f6b3a}
+.checkout input[type=checkbox],.auth input[type=checkbox]{width:auto;flex:none;margin:3px 0 0}
