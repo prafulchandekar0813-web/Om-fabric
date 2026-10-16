@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth wide">
+  <p class="eyebrow"><a href="{{ url_for('acct.home') }}">← MY ACCOUNT</a></p>
+  <h1>Order #{{ 1000 + order.id }}</h1>
+  <div class="rte">
+    <p><strong>{{ status_labels[order.status] }}</strong> · placed {{ order.created_at[:10] }}</p>
+    {% if order.status != 'cancelled' %}
+    <ol class="timeline">
+      {% set idx = steps.index(order.status) if order.status in steps else 0 %}
+      {% for s in steps %}<li class="{{ 'done' if loop.index0 <= idx else '' }}">{{ status_labels[s] }}</li>{% endfor %}
+    </ol>
+    {% endif %}
+    {% if order.tracking %}<p><strong>Courier / tracking:</strong> {{ order.tracking }}</p>{% endif %}
+    {% for i in items %}<p>{{ i.quantity }} × {{ i.product }}{% if i.variant != 'Default Title' %} ({{ i.variant }}){% endif %} — {{ (i.unit_price * i.quantity) | money }}</p>{% endfor %}
+    <p>Subtotal: {{ order.subtotal | money }}<br>
+      {% if order.discount_amount %}Discount ({{ order.discount_code }}): -{{ order.discount_amount | money }}<br>{% endif %}
+      Shipping: {{ 'Free' if order.shipping == 0 else order.shipping | money }}<br>
+      {% if order.cod_fee %}COD fee: {{ order.cod_fee | money }}<br>{% endif %}
+      <strong>Total: {{ order.total | money }}</strong> · {{ 'Paid online' if order.payment_status == 'paid' else order.payment_method }}</p>
+    <p><strong>Delivering to:</strong> {{ order.name }}, {{ order.address }}, {{ order.city }}, {{ order.state }} {{ order.pincode }}</p>
+    <p class="note">Need help with this order? <a href="{{ url_for('contact') }}">Contact us</a> and quote the order number.</p>
+  </div>
+</section>
+{% endblock %}

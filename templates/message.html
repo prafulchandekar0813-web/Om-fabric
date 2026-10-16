@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth">
+  <h1>{{ title }}</h1>
+  <p>{{ text }}</p>
+  {% if link %}<a class="button dark" href="{{ link }}">{{ link_label }}</a>{% endif %}
+</section>
+{% endblock %}

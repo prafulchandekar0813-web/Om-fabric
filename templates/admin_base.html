@@ -2,7 +2,7 @@
 {% block content %}
 <section class="admin">
   <nav class="admin-nav" aria-label="Admin">
-    {% for key, label, ep in [('orders','Orders','adm.orders'),('products','Products','adm.products'),('collections','Collections','adm.collections'),('discounts','Discounts','adm.discounts'),('pages','Pages','adm.pages'),('inventory','Stock','adm.inventory'),('messages','Messages','adm.messages'),('settings','Settings','adm.settings')] %}
+    {% for key, label, ep in [('orders','Orders','adm.orders'),('products','Products','adm.products'),('collections','Collections','adm.collections'),('discounts','Discounts','adm.discounts'),('customers','Customers','adm.customers'),('carts','Carts','adm.carts'),('pages','Pages','adm.pages'),('inventory','Stock','adm.inventory'),('messages','Messages','adm.messages'),('settings','Settings','adm.settings')] %}
       <a href="{{ url_for(ep) }}" class="{{ 'active' if section == key else '' }}">{{ label }}</a>
     {% endfor %}
     <a href="{{ url_for('index') }}" target="_blank" rel="noopener" style="margin-left:auto">View store ↗</a>

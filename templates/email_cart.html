@@ -1,0 +1,29 @@
+<!doctype html>
+<html><body style="margin:0;padding:0;background:#f4f2ec;font-family:Helvetica,Arial,sans-serif;color:#22221f">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f2ec"><tr><td align="center" style="padding:24px 12px">
+  <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff">
+    <tr><td style="padding:28px 28px 8px;font-size:20px;font-weight:bold;letter-spacing:-0.5px">{{ shop }}</td></tr>
+    <tr><td style="padding:8px 28px 4px;font-size:22px;font-weight:bold">Hi {{ name or 'there' }}, you left {{ 'something' if lines|length == 1 else 'a few things' }} in your bag</td></tr>
+    <tr><td style="padding:4px 28px 16px;font-size:14px;line-height:1.6;color:#555">Pick up where you left off — your bag is saved.</td></tr>
+    {% for l in lines %}
+    <tr><td style="padding:10px 28px;border-top:1px solid #eee">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        {% if l.image %}<td width="72" valign="top"><a href="{{ l.url }}"><img src="{{ l.image }}" width="64" height="85" alt="" style="display:block;object-fit:cover;border:0"></a></td>{% endif %}
+        <td valign="top" style="font-size:14px;line-height:1.5"><a href="{{ l.url }}" style="color:#22221f;text-decoration:none;font-weight:bold">{{ l.name }}</a><br>
+          <span style="color:#777">{% if l.option %}{{ l.option }} · {% endif %}Qty {{ l.qty }}</span></td>
+        <td align="right" valign="top" style="font-size:14px;font-weight:bold">{{ l.total | money }}</td>
+      </tr></table>
+    </td></tr>
+    {% endfor %}
+    <tr><td align="right" style="padding:14px 28px;border-top:1px solid #eee;font-size:14px">Subtotal <strong>{{ subtotal | money }}</strong></td></tr>
+    {% if code %}
+    <tr><td style="padding:0 28px 12px"><div style="background:#f4f2ec;padding:14px;font-size:14px;text-align:center">Use code <strong style="letter-spacing:1px">{{ code.code }}</strong> for {{ code_text }}.<br><span style="color:#777;font-size:12px">It’s added automatically when you use the button below.</span></div></td></tr>
+    {% endif %}
+    <tr><td align="center" style="padding:8px 28px 28px"><a href="{{ restore_url }}" style="display:inline-block;background:#22221f;color:#ffffff;text-decoration:none;padding:14px 28px;font-size:14px;font-weight:bold">Return to your bag</a></td></tr>
+    <tr><td style="padding:16px 28px 24px;border-top:1px solid #eee;font-size:11px;line-height:1.6;color:#888">
+      Items are only held while stock lasts. You’re getting this because you asked for cart reminders.<br>
+      <a href="{{ unsub_url }}" style="color:#888">Unsubscribe</a>{% if footer %} · {{ footer }}{% endif %}
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>

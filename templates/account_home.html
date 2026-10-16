@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth wide">
+  <p class="eyebrow">MY ACCOUNT</p>
+  <h1>Hi, {{ (customer.name or 'there').split()[0] }}</h1>
+  <div class="note">{{ customer.email }} ·
+    <a href="{{ url_for('acct.profile') }}">Profile &amp; address</a> ·
+    <form class="inline" method="post" action="{{ url_for('acct.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linklike" type="submit">Log out</button></form></div>
+  {% if not customer.email_verified %}
+  <div class="callout">
+    <strong>Confirm your email</strong> to see orders you placed before creating this account.
+    <form class="inline" method="post" action="{{ url_for('acct.resend_verification') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button small" type="submit">Resend confirmation email</button></form>
+  </div>
+  {% endif %}
+  <h2>Your orders</h2>
+  {% if orders %}
+  <div class="table-wrap"><table class="orders-table">
+    <tr><th>Order</th><th>Date</th><th>Status</th><th>Total</th><th></th></tr>
+    {% for o in orders %}
+    <tr><td>#{{ o.number }}</td><td>{{ o.created_at[:10] }}</td><td>{{ status_labels[o.status] }}</td><td>{{ o.total | money }}</td>
+      <td><a href="{{ url_for('acct.order', number=o.number) }}">View ↗</a></td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+  <p>No orders yet. <a href="{{ url_for('collection', handle='all') }}">Start shopping ↗</a></p>
+  {% endif %}
+</section>
+{% endblock %}

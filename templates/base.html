@@ -39,6 +39,7 @@
     </nav>
     <div class="header-actions">
       <a class="cart-link" href="{{ url_for('search') }}">Search</a>
+      {% if customer %}<a class="cart-link" href="{{ url_for('acct.home') }}">{{ (customer.name or 'Account').split()[0] }}</a>{% else %}<a class="cart-link" href="{{ url_for('acct.login') }}">Log in</a>{% endif %}
       <a class="cart-link" href="{{ url_for('cart') }}">Bag ({{ cart_count }})</a>
     </div>
   </header>

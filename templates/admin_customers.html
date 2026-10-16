@@ -1,0 +1,22 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<div class="head-row"><h2>Customers ({{ total }})</h2>
+  <form method="get" class="inline-form" style="max-width:340px"><input name="q" value="{{ q }}" placeholder="Search name or email"><button class="button small">Search</button></form></div>
+<p class="note">Accounts created on your store. Guests who check out without an account aren’t listed here — they appear in Orders. Deleting an account removes the person’s details but keeps their past orders (unlinked) for your accounting.</p>
+<div class="table-wrap"><table>
+  <tr><th>Customer</th><th>Joined</th><th>Email</th><th>Orders</th><th>Spent</th><th>Cart reminders</th><th></th></tr>
+  {% for c in customers %}
+  <tr>
+    <td><strong>{{ c.name }}</strong><br>{{ c.email }}{% if c.phone %}<br>{{ c.phone }}{% endif %}</td>
+    <td>{{ c.created_at[:10] }}{% if c.last_login_at %}<br><small>last login {{ c.last_login_at[:10] }}</small>{% endif %}</td>
+    <td>{% if c.email_verified %}<span class="badge">Verified</span>{% else %}<span class="badge warn">Not verified</span>{% endif %}</td>
+    <td>{{ c.orders }}</td><td>{{ c.spent | money }}</td>
+    <td>{{ 'On' if c.cart_reminders else 'Off' }}</td>
+    <td><div class="btn-row">
+      {% if not c.email_verified %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ c.id }}"><button class="button small" name="action" value="verify">Mark verified</button></form>{% endif %}
+      <form method="post" data-confirm="Delete the account for {{ c.email }}? Their orders are kept."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ c.id }}"><button class="button small danger" name="action" value="delete">Delete</button></form>
+    </div></td>
+  </tr>
+  {% else %}<tr><td colspan="7">No customers yet.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

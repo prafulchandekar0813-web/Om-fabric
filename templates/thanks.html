@@ -14,6 +14,7 @@
        {% if order.cod_fee %}COD fee: {{ order.cod_fee | money }}<br>{% endif %}
        <strong>Total: {{ order.total | money }}</strong></p>
     <p>Check progress any time on the <a href="{{ url_for('track') }}">Track order</a> page.</p>
+    {% if not customer %}<p class="note">Want to see your orders in one place and check out faster next time? <a href="{{ url_for('acct.register', email=order.email) }}">Create an account</a> (optional).</p>{% endif %}
   </div>
   <a class="button dark" href="{{ url_for('index') }}">Continue shopping</a>
 </section>

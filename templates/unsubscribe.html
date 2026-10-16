@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth">
+  {% if done %}
+    <p class="eyebrow">DONE</p><h1>You’re unsubscribed</h1>
+    <p>We won’t send cart reminders to <strong>{{ email }}</strong> any more. Order and account emails (receipts, password resets) are not affected.</p>
+    <a class="button dark" href="{{ url_for('index') }}">Back to the shop</a>
+  {% else %}
+    <p class="eyebrow">CART REMINDERS</p><h1>Unsubscribe?</h1>
+    <p>Stop cart reminder emails to <strong>{{ email }}</strong>?</p>
+    <form method="post" action="{{ url_for('carts.unsubscribe_post', token=token) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="button dark" type="submit">Yes, unsubscribe</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

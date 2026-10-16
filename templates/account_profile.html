@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth wide">
+  <p class="eyebrow"><a href="{{ url_for('acct.home') }}">← MY ACCOUNT</a></p>
+  <h1>Profile</h1>
+
+  <div class="panel"><h2>Your details</h2>
+    <form method="post" action="{{ url_for('acct.profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="details">
+      <label>Email</label><input value="{{ customer.email }}" disabled>
+      <p class="note">To change your email, contact us.</p>
+      <label for="name">Full name</label><input id="name" name="name" value="{{ customer.name or '' }}" required>
+      <label for="phone">Mobile number</label><input id="phone" type="tel" name="phone" value="{{ customer.phone or '' }}">
+      <button class="button dark small" type="submit">Save details</button>
+    </form></div>
+
+  <div class="panel"><h2>Saved address</h2>
+    <p class="note">We’ll fill this in at checkout. Clear all the fields and save to remove it.</p>
+    <form method="post" action="{{ url_for('acct.profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="address">
+      <label for="address">Address</label><textarea id="address" name="address" rows="3">{{ customer.address or '' }}</textarea>
+      <div class="two"><div><label for="city">City</label><input id="city" name="city" value="{{ customer.city or '' }}"></div>
+      <div><label for="state">State</label><input id="state" name="state" value="{{ customer.state or '' }}"></div></div>
+      <label for="pincode">PIN code</label><input id="pincode" name="pincode" inputmode="numeric" maxlength="6" value="{{ customer.pincode or '' }}">
+      <button class="button dark small" type="submit">Save address</button>
+    </form></div>
+
+  <div class="panel"><h2>Email preferences</h2>
+    <form method="post" action="{{ url_for('acct.profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="reminders">
+      <label class="check"><input type="checkbox" name="cart_reminders" value="1"{% if customer.cart_reminders %} checked{% endif %}> Email me a reminder if I leave items in my bag</label>
+      <p class="note">At most two emails per bag. Order and account emails are always sent.</p>
+      <button class="button dark small" type="submit">Save preference</button>
+    </form></div>
+
+  <div class="panel"><h2>Change password</h2>
+    <form method="post" action="{{ url_for('acct.profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="password">
+      <label for="current_password">Current password</label><input id="current_password" type="password" name="current_password" autocomplete="current-password" required>
+      <label for="new_password">New password <small>(at least 8 characters)</small></label><input id="new_password" type="password" name="new_password" autocomplete="new-password" minlength="8" required>
+      <label for="new_password2">Confirm new password</label><input id="new_password2" type="password" name="new_password2" autocomplete="new-password" minlength="8" required>
+      <button class="button dark small" type="submit">Change password</button>
+    </form></div>
+
+  <div class="panel"><h2>Delete my account</h2>
+    <p class="note">This removes your account, saved address and cart reminders. Past orders are kept only for our accounting records and are no longer linked to you.</p>
+    <form method="post" action="{{ url_for('acct.delete') }}" data-confirm="Delete your account permanently?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="del_pw">Your password</label><input id="del_pw" type="password" name="password" autocomplete="current-password" required>
+      <button class="button small danger" type="submit">Delete my account</button>
+    </form></div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/admin.js') }}"></script>{% endblock %}

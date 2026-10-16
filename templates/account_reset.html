@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth">
+  <p class="eyebrow">ALMOST DONE</p>
+  <h1>Choose a new password</h1>
+  <form method="post" action="{{ url_for('acct.reset', token=token) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="password">New password <small>(at least 8 characters)</small></label>
+    <input id="password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+    <label for="password2">Confirm new password</label>
+    <input id="password2" type="password" name="password2" autocomplete="new-password" minlength="8" required>
+    <button class="button dark" type="submit">Save new password ↗</button>
+  </form>
+</section>
+{% endblock %}

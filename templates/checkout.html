@@ -5,6 +5,8 @@
   <div>
     <p class="eyebrow">ALMOST THERE</p>
     <h1>Checkout</h1>
+    {% if customer %}<p class="note">Signed in as {{ customer.email }} · <a href="{{ url_for('acct.home') }}">My account</a></p>
+    {% else %}<p class="note">Have an account? <a href="{{ url_for('acct.login', next='/checkout') }}">Log in</a> for faster checkout — or continue as a guest.</p>{% endif %}
     {% if errors.get('cart') %}<p class="field-error">{{ errors.cart }} <a href="{{ url_for('cart') }}">Back to bag</a></p>{% endif %}
     <form method="post" action="{{ url_for('checkout') }}" novalidate>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -24,6 +26,12 @@
       </div>
       <label for="pincode">PIN code</label>
       <input id="pincode" name="pincode" inputmode="numeric" maxlength="6" value="{{ form.get('pincode','') }}" autocomplete="postal-code" required>{{ err('pincode') }}
+      {% if customer %}
+      <label class="check"><input type="checkbox" name="save_address" value="1"{% if form.get('save_address') == '1' %} checked{% endif %}> Save this address to my account</label>
+      {% else %}
+      <label class="check"><input type="checkbox" name="remind" id="remind" value="1"{% if remind_on %} checked{% endif %}> Email me a reminder if I don’t finish my order</label>
+      <p class="note">Optional. At most two emails about this bag, each with an unsubscribe link. See our <a href="{{ url_for('page', handle='privacy') }}">Privacy policy</a>.</p>
+      {% endif %}
 
       <label for="payment">Payment method</label>
       <select id="payment" name="payment">

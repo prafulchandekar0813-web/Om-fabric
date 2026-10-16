@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth">
+  <p class="eyebrow">NO WORRIES</p>
+  <h1>Reset password</h1>
+  {% if not sent %}
+  <p class="note">Enter your account email and we’ll send you a link to choose a new password.</p>
+  <form method="post" action="{{ url_for('acct.forgot') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="email">Email</label><input id="email" type="email" name="email" autocomplete="email" required>
+    <button class="button dark" type="submit">Send reset link ↗</button>
+  </form>
+  {% endif %}
+  <p class="note"><a href="{{ url_for('acct.login') }}">← Back to log in</a></p>
+</section>
+{% endblock %}

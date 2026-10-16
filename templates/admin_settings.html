@@ -50,6 +50,16 @@
     <div class="grid2"><div>{{ txt('biz_address','Address',250) }}</div><div>{{ txt('biz_phone','Phone',30) }}</div></div>
   </div>
 
+  <div class="card"><h3>Abandoned-cart emails</h3>
+    <p class="note">Emails shoppers who <strong>agreed</strong> to cart reminders (account holders who keep it on, or guests who tick the box at checkout) and left without ordering. Every email has an unsubscribe link. Needs email (SMTP) set up — see the Carts tab. Nothing is sent between 10pm and 8am IST.</p>
+    <label><input type="checkbox" name="ac_enabled" value="1"{% if form.get('ac_enabled') %} checked{% endif %}> Send cart reminder emails</label>
+    <div class="grid3"><div>{{ txt('ac_first','First reminder after (hours)',3) }}</div>
+      <div>{{ txt('ac_second','Second reminder after (hours)',3) }}</div>
+      <div><label for="ac_code">Discount code in the second email</label>
+        <select id="ac_code" name="ac_code"><option value="">None</option>{% for c in codes %}<option value="{{ c }}"{% if form.get('ac_code') == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select></div></div>
+    <label><input type="checkbox" name="ac_second_on" value="1"{% if form.get('ac_second_on') %} checked{% endif %}> Send a second reminder</label>
+  </div>
+
   <div class="card"><h3>Analytics <small>(optional)</small></h3>
     <div class="grid2"><div>{{ txt('ga4_id','Google Analytics ID',20,'Looks like G-XXXXXXXXXX') }}</div><div>{{ txt('plausible_domain','Plausible domain',100,'e.g. yourshop.in') }}</div></div>
   </div>

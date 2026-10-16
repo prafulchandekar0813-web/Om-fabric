@@ -1,0 +1,33 @@
+{% extends "admin_base.html" %}
+{% block admin %}
+<h2>Abandoned carts</h2>
+<div class="stats">
+  <div class="stat"><b>{{ stats.active }}</b>Open tracked bags</div>
+  <div class="stat"><b>{{ stats.emails_sent }}</b>Reminder emails sent</div>
+  <div class="stat"><b>{{ stats.recovered }} / {{ stats.reminded }}</b>Bags that ordered after a reminder</div>
+  <div class="stat"><b>{{ stats.revenue | money }}</b>Sales recovered</div>
+</div>
+
+<div class="card">
+  <h3>Is it ready to send?</h3>
+  <ul class="checklist">
+    <li class="{{ 'ok' if cfg.enabled else 'no' }}">Reminders are {{ 'ON' if cfg.enabled else 'OFF' }} — first after {{ cfg.first_after_hours }}h{% if cfg.send_second %}, second after {{ cfg.second_after_hours }}h{% if cfg.discount_code %} (with code {{ cfg.discount_code }}){% endif %}{% endif %} · <a href="{{ url_for('adm.settings') }}">change in Settings</a></li>
+    <li class="{{ 'ok' if smtp else 'no' }}">Email (SMTP): {{ 'set up' if smtp else 'NOT set up — set SMTP_HOST, SMTP_USER, SMTP_PASSWORD' }}</li>
+    <li class="{{ 'ok' if site_url else 'no' }}">SITE_URL: {{ site_url or 'NOT set — links in emails need it' }}</li>
+    <li class="{{ 'ok' if (cron or scheduler) else 'no' }}">Something must run the job regularly: {% if scheduler %}built-in scheduler is ON (every 10 min){% elif cron %}cron endpoint is enabled (call <code>/tasks/abandoned-carts</code> with your CRON_SECRET){% else %}NOT set up — set <code>ENABLE_SCHEDULER=1</code> (simplest), or <code>CRON_SECRET</code> and a cron service, or schedule <code>python reminders.py</code>{% endif %}</li>
+  </ul>
+  <form method="post" action="{{ url_for('adm.carts_run') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button dark small">Run reminders now</button> <small>Follows all the rules (delays, quiet hours, unsubscribes) — it only sends what is due.</small></form>
+  <p class="note">{{ stats.suppressed }} address{{ '' if stats.suppressed == 1 else 'es' }} unsubscribed.</p>
+</div>
+
+<h3>Latest tracked bags</h3>
+<p class="note">Only shoppers who agreed to reminders are tracked here.</p>
+<div class="table-wrap"><table>
+  <tr><th>Updated (UTC)</th><th>Email</th><th>Items</th><th>Value</th><th>Status</th><th>Emails sent</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.updated_at }}</td><td>{{ r.email }}</td><td>{{ r.summary }}</td><td>{{ r.subtotal | money }}</td>
+    <td><span class="badge{{ ' warn' if r.status in ('unsubscribed','expired') else '' }}">{{ r.status }}</span>{% if r.clicked_at %}<br><small>clicked the link</small>{% endif %}</td>
+    <td>{{ r.reminders_sent }}{% if r.reminder_code %}<br><small>code {{ r.reminder_code }}</small>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6">No tracked bags yet.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}
